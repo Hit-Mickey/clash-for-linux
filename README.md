@@ -22,8 +22,8 @@
 下述命令适用于 `x86_64` 架构，其他架构请戳：[一键安装-多架构](https://github.com/nelvko/clash-for-linux-install/wiki#%E4%B8%80%E9%94%AE%E5%AE%89%E8%A3%85-%E5%A4%9A%E6%9E%B6%E6%9E%84)
 
 ```bash
-git clone --branch master --depth 1 https://gh-proxy.com/https://github.com/nelvko/clash-for-linux-install.git \
-  && cd clash-for-linux-install \
+git clone --branch master --depth 1 https://gh-proxy.com/https://github.com/Hit-Mickey/clash-for-linux-server.git clash \
+  && cd clash \
   && sudo bash install.sh
 ```
 
@@ -53,6 +53,7 @@ Commands:
     mixin    [-e|-r]     Mixin 配置
     secret   [SECRET]    Web 密钥
     update   [auto|log]  更新订阅
+    upgrade				 更新内核
 ```
 
 💡`clashon` 等同于 `clashctl on`，`Tab` 补全更方便！
@@ -163,22 +164,3 @@ sudo bash uninstall.sh
 - [subconverter: 订阅转换](https://github.com/tindy2013/subconverter)
 - [yacd: Web 控制台](https://github.com/haishanh/yacd)
 - [yq: 处理 yaml](https://github.com/mikefarah/yq)
-
-## Star History
-
-<a href="https://www.star-history.com/#nelvko/clash-for-linux-install&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nelvko/clash-for-linux-install&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nelvko/clash-for-linux-install&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=nelvko/clash-for-linux-install&type=Date" />
- </picture>
-</a>
-
-## Thanks
-
-[@鑫哥](https://github.com/TrackRay)
-
-## 特别声明
-
-1. 编写本项目主要目的为学习和研究 `Shell` 编程，不得将本项目中任何内容用于违反国家/地区/组织等的法律法规或相关规定的其他用途。
-2. 本项目保留随时对免责声明进行补充或更改的权利，直接或间接使用本项目内容的个人或组织，视为接受本项目的特别声明。
