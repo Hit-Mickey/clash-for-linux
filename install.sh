@@ -16,9 +16,15 @@ tar -xf "$ZIP_YQ" -C "${RESOURCES_BIN_DIR}"
 /bin/mv -f ${RESOURCES_BIN_DIR}/yq_* "${RESOURCES_BIN_DIR}/yq"
 
 _set_bin "$RESOURCES_BIN_DIR"
+url=""
 _valid_config "$RESOURCES_CONFIG" || {
-    echo -n "$(_okcat '✈️ ' '输入订阅：')"
-    read -r url
+    # 检查变量 url 是否为空
+    if [ -z "$url" ]; then
+        echo -n "$(_okcat '✈️ ' '未检测到预配 URL，请输入订阅：')"
+        read -r url
+    else
+        echo "$(_okcat '✅ ' '检测到预配 URL，自动跳过输入。')"
+    fi
     _okcat '⏳' '正在下载...'
     _download_config "$RESOURCES_CONFIG" "$url" || _error_quit "下载失败: 请将配置内容写入 $RESOURCES_CONFIG 后重新安装"
     _valid_config "$RESOURCES_CONFIG" || _error_quit "配置无效，请检查配置：$RESOURCES_CONFIG，转换日志：$BIN_SUBCONVERTER_LOG"
@@ -29,7 +35,11 @@ echo "$url" >"$CLASH_CONFIG_URL"
 
 /bin/cp -rf "$SCRIPT_BASE_DIR" "$CLASH_BASE_DIR"
 /bin/ls "$RESOURCES_BASE_DIR" | grep -Ev 'zip|png' | xargs -I {} /bin/cp -rf "${RESOURCES_BASE_DIR}/{}" "$CLASH_BASE_DIR"
-tar -xf "$ZIP_UI" -C "$CLASH_BASE_DIR"
+if [[ "$ZIP_UI" == *.zip ]]; then
+    unzip -o "$ZIP_UI" -d "$CLASH_BASE_DIR"
+elif [[ "$ZIP_UI" == *.tar.gz ]]; then
+    tar -xzf "$ZIP_UI" -C "$CLASH_BASE_DIR"
+fi
 
 _set_rc
 _set_bin

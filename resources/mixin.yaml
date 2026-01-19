@@ -1,44 +1,81 @@
 # 系统代理配置
 system-proxy:
   enable: true
+ipv6: true
+mixed-port: 7897
 
-mixed-port: 7890
-
-# Web 控制台配置
-external-controller: "0.0.0.0:9090"
-external-ui: public
-secret:
-
-# 代理服务器配置
-allow-lan: false # 若开启务必设置用户验证以防暴露公网后被滥用
+allow-lan: true
 authentication:
   # - "username:password" # 用户验证（clashon 会自动填充验证信息）
+unified-delay: true
+tcp-concurrent: true
+external-controller: "0.0.0.0:9000"
+external-ui: yacd-meta
+secret: 
+external-ui-url: 
 
-# 自定义规则
-rules:
-  - DOMAIN,api64.ipify.org,DIRECT # 用于 clashui 获取真实公网 IP
 
-# tun 配置
+profile:
+  tracing: true
+  store-selected: true
+
 tun:
   enable: false
-  stack: system
-  auto-route: true
-  auto-redir: true # clash
-  auto-redirect: true # mihomo
-  auto-detect-interface: true
+  stack: gvisor # system  gvisor  mixed
   dns-hijack:
-    - any:53
-    - tcp://any:53
-  strict-route: true
-  exclude-interface:
-    # - docker0
-    # - podman0
+    - "any:53"
+    - "tcp://any:53"
+  auto-route: true
+  auto-redirect: true
+  strict-route: false
+  auto-detect-interface: true
 
-# DNS 配置
 dns:
+  default-nameserver:
+  - system
+  - 223.6.6.6
+  - 8.8.8.8
+  - 2400:3200::1
+  - 2001:4860:4860::8888
+  direct-nameserver: []
+  direct-nameserver-follow-policy: false
   enable: true
-  listen: 0.0.0.0:1053
   enhanced-mode: fake-ip
+  fake-ip-filter:
+  - '*.lan'
+  - '*.local'
+  - '*.arpa'
+  - time.*.com
+  - ntp.*.com
+  - time.*.com
+  - +.market.xiaomi.com
+  - localhost.ptlogin2.qq.com
+  - '*.msftncsi.com'
+  - www.msftconnecttest.com
+  fake-ip-filter-mode: blacklist
+  fake-ip-range: 198.18.0.1/16
+  fallback: []
+  fallback-filter:
+    domain:
+    - +.google.com
+    - +.facebook.com
+    - +.youtube.com
+    geoip: true
+    geoip-code: CN
+    ipcidr:
+    - 240.0.0.0/4
+    - 0.0.0.0/32
+  ipv6: true
+  listen: :53
   nameserver:
-    - 114.114.114.114
-    - 8.8.8.8
+  - 8.8.8.8
+  - https://doh.pub/dns-query
+  - https://dns.alidns.com/dns-query
+  prefer-h3: false
+  proxy-server-nameserver:
+  - https://doh.pub/dns-query
+  - https://dns.alidns.com/dns-query
+  - tls://223.5.5.5
+  respect-rules: false
+  use-hosts: false
+  use-system-hosts: false

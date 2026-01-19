@@ -10,33 +10,53 @@
 - 支持使用 [subconverter](https://github.com/tindy2013/subconverter) 进行本地订阅转换。
 - 多架构支持，适配主流 `Linux` 发行版：`CentOS 7.6`、`Debian 12`、`Ubuntu 24.04.1 LTS`。
 
+## 说明
+
+本项目来自[clash-for-linux-install](https://github.com/nelvko/clash-for-linux-install)，根据个人需要重新进行了修改，修改地方如下：
+
+1. 添加主流web-ui控制台（[metacubexd](https://github.com/MetaCubeX/metacubexd)，[Yacd-meta](https://github.com/MetaCubeX/Yacd-meta)，[Yacd](https://github.com/haishanh/yacd)），默认Yacd-meta。
+
+2. 修复了上游项目兼顾 普通用户 与 `sudo`用户 而造成的命令混乱。
+
+3. mixin.yaml中添加了更为详细的DNS覆写规则和tun规则，支持ipv6，开箱即用。
+
+4. 由我最喜欢的一版代码修改而来，clashstatus命令可以方便查看运行状态。
+
+   ![image-20260119215237942](./Picture/README/image-20260119215237942.png)
+
 ## 快速开始
 
 ### 环境要求
 
-- 用户权限：`root` 或 `sudo` 用户。普通用户请戳：[#91](https://github.com/nelvko/clash-for-linux-install/issues/91)
+- 用户权限：`root` 或 `sudo` 用户。
 - `shell` 支持：`bash`、`zsh`、`fish`。
 
 ### 一键安装
 
-下述命令适用于 `x86_64` 架构，其他架构请戳：[一键安装-多架构](https://github.com/nelvko/clash-for-linux-install/wiki#%E4%B8%80%E9%94%AE%E5%AE%89%E8%A3%85-%E5%A4%9A%E6%9E%B6%E6%9E%84)
+下述命令适用于 `x86_64` 架构
 
 ```bash
-git clone --branch master --depth 1 https://hk.gh-proxy.org/https://github.com/Hit-Mickey/clash-for-linux-server.git clash \
+git clone --branch master --depth 1 https://gh-proxy.org/https://github.com/Hit-Mickey/clash-for-linux-server.git clash \
   && cd clash \
   && sudo bash install.sh
 ```
 
 > 如遇问题，请在查阅[常见问题](https://github.com/nelvko/clash-for-linux-install/wiki/FAQ)及 [issue](https://github.com/nelvko/clash-for-linux-install/issues?q=is%3Aissue) 未果后进行反馈。
 
-- 上述克隆命令使用了[加速前缀](https://gh-proxy.com/)，如失效请更换其他[可用链接](https://ghproxy.link/)。
-- 默认通过远程订阅获取配置进行安装，本地配置安装详见：[#39](https://github.com/nelvko/clash-for-linux-install/issues/39)
-- 没有订阅？[click me](https://次元.net/auth/register?code=oUbI)
+- 上述克隆命令使用了[加速前缀](https://gh-proxy.com/)，如失效请更换其他[可用链接](https://gh-proxy.com/)。
+- 默认通过远程订阅获取配置进行安装，本地配置安装详见：在`resources`目录中新建`config.yaml`，将配置粘贴进去再执行安装脚本。
+- 没有订阅？[click me](https://wd-gold.net/aff.php?aff=12861)。
+
+### 自定义安装
+
+1. 可以根据喜好自己提前修改mixin.yaml中的相关配置，**其中留空的变量名不要随意删除**，当然也可以在安装完后进行修改。
+2. 若需更换web控制台，需要修改的地方有两处：
+   1. `script`文件夹下`common.sh`的`ZIP_UI="${ZIP_BASE_DIR}/Yacd-meta-gh-pages.zip"`，修改压缩包名称即可，可用的压缩包在`resources/zip`文件夹下查看，当然也可以自己下载后放到该文件夹下。
+   2. `resources`文件夹下`mixin.yaml`中的`external-ui:`，将名字改为对应web控制台的名字，可选项（yacd-meta，yacd，metacubexd）。如果是自己下载的压缩包，则为解压后的文件夹名称。
 
 ### 命令一览
 
 执行 `clashctl` 列出开箱即用的快捷命令。
-
 
 ```bash
 $ clashctl
@@ -53,7 +73,7 @@ Commands:
     mixin    [-e|-r]     Mixin 配置
     secret   [SECRET]    Web 密钥
     update   [auto|log]  更新订阅
-    upgrade				 更新内核
+    upgrade     		 更新内核
 ```
 
 💡`clashon` 等同于 `clashctl on`，`Tab` 补全更方便！
@@ -67,6 +87,7 @@ $ clashon
 $ clashoff
 😼 已关闭代理环境
 ```
+
 - 启停代理内核的同时，设置系统代理。
 - 亦可通过 `clashproxy` 单独控制系统代理。
 
