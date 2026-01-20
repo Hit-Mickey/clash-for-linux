@@ -37,7 +37,7 @@
 下述命令适用于 `x86_64` 架构
 
 ```bash
-git clone --branch master --depth 1 https://gh-proxy.org/https://github.com/Hit-Mickey/clash-for-linux-server.git clash \
+git clone --branch master --depth 1 https://gh-proxy.org/https://github.com/Hit-Mickey/clash-for-linux.git clash \
   && cd clash \
   && sudo bash install.sh
 ```
