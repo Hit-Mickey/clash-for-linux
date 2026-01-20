@@ -2,13 +2,12 @@
 
 ![GitHub License](https://img.shields.io/github/license/nelvko/clash-for-linux-install)
 ![GitHub top language](https://img.shields.io/github/languages/top/nelvko/clash-for-linux-install)
-![GitHub Repo stars](https://img.shields.io/github/stars/nelvko/clash-for-linux-install)
 
-![preview](resources/preview.png)
+<img src="./Picture/README/image-20260120164005163.png" alt="image-20260120164005163" style="zoom:80%;" />
 
 - 默认安装 `mihomo` 内核，[可选安装](https://github.com/nelvko/clash-for-linux-install/wiki/FAQ#%E5%AE%89%E8%A3%85-clash-%E5%86%85%E6%A0%B8) `clash`。
 - 支持使用 [subconverter](https://github.com/tindy2013/subconverter) 进行本地订阅转换。
-- 多架构支持，适配主流 `Linux` 发行版：`CentOS 7.6`、`Debian 12`、`Ubuntu 24.04.1 LTS`。
+- 多架构支持，适配主流 `Linux` 发行版：`CentOS 7.6`、`Debian 12`、`Ubuntu 22.04.1 LTS`、`Ubuntu 24.04.1 LTS`。
 
 ## 说明
 
@@ -23,6 +22,8 @@
 4. 由我最喜欢的一版代码修改而来，clashstatus命令可以方便查看运行状态。
 
    ![image-20260119215237942](./Picture/README/image-20260119215237942.png)
+
+5. 2026.1.20修改：适配linux主流桌面环境，为桌面环境添加系统代理，通过`clashon`、`clashoff`一键控制桌面环境、终端环境代理
 
 ## 快速开始
 
@@ -78,15 +79,22 @@ Commands:
 
 💡`clashon` 等同于 `clashctl on`，`Tab` 补全更方便！
 
-### 优雅启停
+### 优雅启停（终端环境+桌面环境）
 
 ```bash
 $ clashon
+🖥️ 检测到桌面环境，正在设置系统 GUI 代理...
 😼 已开启代理环境
+```
 
+ ![image-20260120164630043](./Picture/README/image-20260120164630043.png)
+
+```bash
 $ clashoff
 😼 已关闭代理环境
 ```
+
+ ![image-20260120165007264](./Picture/README/image-20260120165007264.png)
 
 - 启停代理内核的同时，设置系统代理。
 - 亦可通过 `clashproxy` 单独控制系统代理。
@@ -175,13 +183,3 @@ sudo bash uninstall.sh
 ## 常见问题
 
 [wiki](https://github.com/nelvko/clash-for-linux-install/wiki/FAQ)
-
-## 引用
-
-- [Clash 知识库](https://clash.wiki/)
-- [Clash 家族下载](https://www.clash.la/releases/)
-- [Clash Premium](https://downloads.clash.wiki/ClashPremium/)
-- [mihomo](https://github.com/MetaCubeX/mihomo)
-- [subconverter: 订阅转换](https://github.com/tindy2013/subconverter)
-- [yacd: Web 控制台](https://github.com/haishanh/yacd)
-- [yq: 处理 yaml](https://github.com/mikefarah/yq)

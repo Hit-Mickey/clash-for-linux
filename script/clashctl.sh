@@ -9,18 +9,35 @@ _set_system_proxy() {
     case $bind_addr in "" | "*" | "0.0.0.0") bind_addr=127.0.0.1 ;; esac
     local http_proxy_addr="http://${auth}${bind_addr}:${MIXED_PORT}"
     local socks_proxy_addr="socks5h://${auth}${bind_addr}:${MIXED_PORT}"
-    local no_proxy_addr="localhost,127.0.0.1,::1"
-
+    
+    # 为当前终端环境设置变量
     export http_proxy=$http_proxy_addr
     export https_proxy=$http_proxy
     export HTTP_PROXY=$http_proxy
     export HTTPS_PROXY=$http_proxy
-
     export all_proxy=$socks_proxy_addr
     export ALL_PROXY=$all_proxy
-
-    export no_proxy=$no_proxy_addr
+    export no_proxy="localhost,127.0.0.1,::1,192.168.0.0/16,172.16.0.0/12,10.0.0.0/8"
     export NO_PROXY=$no_proxy
+
+    # 设置 GNOME 桌面系统代理（如果有）
+    if command -v gsettings >/dev/null 2>&1; then
+        [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
+        echo "🖥️ 检测到桌面环境，正在设置系统 GUI 代理..."
+        
+        gsettings set org.gnome.system.proxy ignore-hosts "['localhost', '127.*', '192.168.*', '10.*', '172.16.*', '172.17.*', '172.18.*', '172.19.*', '172.20.*', '172.21.*', '172.22.*', '172.23.*', '172.24.*', '172.25.*', '172.26.*', '172.27.*', '172.28.*', '172.29.*', '172.30.*', '172.31.*', '<local>']"
+
+        gsettings set org.gnome.system.proxy.http host "$bind_addr"
+        gsettings set org.gnome.system.proxy.http port "$MIXED_PORT"
+
+        gsettings set org.gnome.system.proxy.https host "$bind_addr"
+        gsettings set org.gnome.system.proxy.https port "$MIXED_PORT"
+
+        gsettings set org.gnome.system.proxy.socks host "$bind_addr"
+        gsettings set org.gnome.system.proxy.socks port "$MIXED_PORT"
+
+        gsettings set org.gnome.system.proxy mode 'manual'
+    fi
 }
 
 _unset_system_proxy() {
@@ -32,6 +49,10 @@ _unset_system_proxy() {
     unset ALL_PROXY
     unset no_proxy
     unset NO_PROXY
+    if command -v gsettings >/dev/null 2>&1; then
+        [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
+        gsettings set org.gnome.system.proxy mode 'none'
+    fi
 }
 
 function clashon() {
