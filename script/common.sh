@@ -298,7 +298,7 @@ _download_raw_config() {
         --show-error \
         --insecure \
         --location \
-        --max-time 5 \
+        --max-time 30 \
         --retry 1 \
         --user-agent "$agent" \
         --output "$dest" \
@@ -306,7 +306,7 @@ _download_raw_config() {
         sudo wget \
             --no-verbose \
             --no-check-certificate \
-            --timeout 3 \
+            --timeout 30 \
             --tries 1 \
             --user-agent "$agent" \
             --output-document "$dest" \
