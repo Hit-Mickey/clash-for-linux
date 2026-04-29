@@ -42,6 +42,11 @@ git clone --branch master --depth 1 https://gh-proxy.org/https://github.com/Hit-
   && sudo bash install.sh
 ```
 
+### 版本一览
+mihomo版本：v1.19.19，后续可通过`clashupgrade`进行升级
+
+安装完后请通过`clashui`和`clashsecret`查看端口和初始密码
+
 > 如遇问题，请在查阅[常见问题](https://github.com/nelvko/clash-for-linux-install/wiki/FAQ)及 [issue](https://github.com/nelvko/clash-for-linux-install/issues?q=is%3Aissue) 未果后进行反馈。
 
 - 上述克隆命令使用了[加速前缀](https://gh-proxy.com/)，如失效请更换其他[可用链接](https://gh-proxy.com/)。
