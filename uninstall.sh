@@ -7,8 +7,11 @@ _valid_env
 
 clashoff >&/dev/null
 
-systemctl disable "$BIN_KERNEL_NAME" >&/dev/null
-rm -f "/etc/systemd/system/${BIN_KERNEL_NAME}.service"
+for service in mihomo clash; do
+    systemctl stop "$service" >&/dev/null
+    systemctl disable "$service" >&/dev/null
+    rm -f "/etc/systemd/system/${service}.service"
+done
 systemctl daemon-reload
 
 rm -rf "$CLASH_BASE_DIR"
