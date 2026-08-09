@@ -157,16 +157,53 @@ function clashui() {
     printf "\n"
 }
 
-_merge_config_restart() {
-    local backup="/tmp/rt.backup"
-    sudo cat "$CLASH_CONFIG_RUNTIME" 2>/dev/null | sudo tee $backup >&/dev/null
-    sudo "$BIN_YQ" eval-all '. as $item ireduce ({}; . *+ $item) | (.. | select(tag == "!!seq")) |= unique' \
-        "$CLASH_CONFIG_MIXIN" "$CLASH_CONFIG_RAW" "$CLASH_CONFIG_MIXIN" | sudo tee "$CLASH_CONFIG_RUNTIME" >&/dev/null
-    _valid_config "$CLASH_CONFIG_RUNTIME" || {
-        sudo cat $backup | sudo tee "$CLASH_CONFIG_RUNTIME" >&/dev/null
-        _error_quit "验证失败：请检查 Mixin 配置"
+_merge_config() {
+    local backup merged
+    local has_backup=false
+    backup=$(mktemp /tmp/clash-runtime.XXXXXX) || {
+        _failcat "无法创建运行配置备份"
+        return 1
     }
-    clashrestart
+    merged=$(mktemp /tmp/clash-merged.XXXXXX) || {
+        /bin/rm -f "$backup"
+        _failcat "无法创建配置合并临时文件"
+        return 1
+    }
+    [ -f "$CLASH_CONFIG_RUNTIME" ] && {
+        sudo /bin/cp -f "$CLASH_CONFIG_RUNTIME" "$backup" || {
+            /bin/rm -f "$backup" "$merged"
+            _failcat "运行配置备份失败"
+            return 1
+        }
+        has_backup=true
+    }
+    sudo "$BIN_YQ" eval-all '. as $item ireduce ({}; . *+ $item) | (.. | select(tag == "!!seq")) |= unique' \
+        "$CLASH_CONFIG_MIXIN" "$CLASH_CONFIG_RAW" "$CLASH_CONFIG_MIXIN" >"$merged" || {
+        /bin/rm -f "$backup" "$merged"
+        _failcat "配置合并失败"
+        return 1
+    }
+    sudo tee "$CLASH_CONFIG_RUNTIME" <"$merged" >&/dev/null || {
+        if [ "$has_backup" = true ]; then
+            sudo /bin/cp -f "$backup" "$CLASH_CONFIG_RUNTIME"
+        else
+            sudo /bin/rm -f "$CLASH_CONFIG_RUNTIME"
+        fi
+        /bin/rm -f "$backup" "$merged"
+        _failcat "运行配置写入失败"
+        return 1
+    }
+    _valid_config "$CLASH_CONFIG_RUNTIME" || {
+        if [ "$has_backup" = true ]; then
+            sudo /bin/cp -f "$backup" "$CLASH_CONFIG_RUNTIME"
+        else
+            sudo /bin/rm -f "$CLASH_CONFIG_RUNTIME"
+        fi
+        /bin/rm -f "$backup" "$merged"
+        _failcat "验证失败：请检查 Mixin 配置"
+        return 1
+    }
+    /bin/rm -f "$backup" "$merged"
 }
 
 function clashsecret() {
@@ -179,7 +216,7 @@ function clashsecret() {
             _failcat "密钥更新失败，请重新输入"
             return 1
         }
-        _merge_config_restart
+        _merge_config && clashrestart || return 1
         _okcat "密钥更新成功，已重启生效"
         ;;
     *)
@@ -197,13 +234,13 @@ _tunstatus() {
 _tunoff() {
     _tunstatus >/dev/null || return 0
     sudo "$BIN_YQ" -i '.tun.enable = false' "$CLASH_CONFIG_MIXIN"
-    _merge_config_restart && _okcat "Tun 模式已关闭"
+    _merge_config && clashrestart && _okcat "Tun 模式已关闭"
 }
 
 _tunon() {
     _tunstatus 2>/dev/null && return 0
     sudo "$BIN_YQ" -i '.tun.enable = true' "$CLASH_CONFIG_MIXIN"
-    _merge_config_restart
+    _merge_config && clashrestart || return 1
     sleep 0.5s
     sudo journalctl -u "$BIN_KERNEL_NAME" --since "1 min ago" | grep -E -m1 'unsupported kernel version|Start TUN listening error' && {
         _tunoff >&/dev/null
@@ -262,6 +299,8 @@ function clashupdate() {
     _rollback() {
         _failcat '🍂' "$1"
         sudo cat "$CLASH_CONFIG_RAW_BAK" | sudo tee "$CLASH_CONFIG_RAW" >&/dev/null
+        _merge_config >/dev/null 2>&1
+        [ "$2" = restart ] && clashrestart >/dev/null 2>&1
         _failcat '❌' "[$(date +"%Y-%m-%d %H:%M:%S")] 订阅更新失败：$url" 2>&1 | sudo tee -a "${CLASH_UPDATE_LOG}" >&/dev/null
         _error_quit
     }
@@ -269,7 +308,7 @@ function clashupdate() {
     _download_config "$CLASH_CONFIG_RAW" "$url" || _rollback "下载失败：已回滚配置"
     _valid_config "$CLASH_CONFIG_RAW" || _rollback "转换失败：已回滚配置，转换日志：$BIN_SUBCONVERTER_LOG"
 
-    _merge_config_restart && _okcat '🍃' '订阅更新成功'
+    _merge_config && clashrestart && _okcat '🍃' '订阅更新成功' || _rollback "配置应用失败：已回滚配置" restart
     echo "$url" | sudo tee "$CLASH_CONFIG_URL" >&/dev/null
     _okcat '✅' "[$(date +"%Y-%m-%d %H:%M:%S")] 订阅更新成功：$url" | sudo tee -a "${CLASH_UPDATE_LOG}" >&/dev/null
 }
@@ -278,7 +317,7 @@ function clashmixin() {
     case "$1" in
     -e)
         sudo vim "$CLASH_CONFIG_MIXIN" && {
-            _merge_config_restart && _okcat "配置更新成功，已重启生效"
+            _merge_config && clashrestart && _okcat "配置更新成功，已重启生效"
         }
         ;;
     -r)

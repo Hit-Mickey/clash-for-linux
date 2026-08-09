@@ -43,7 +43,12 @@ fi
 
 _set_rc
 _set_bin
-_merge_config_restart
+secret=$(_get_random_val)
+sudo "$BIN_YQ" -i ".secret = \"$secret\"" "$CLASH_CONFIG_MIXIN" || {
+    _failcat "初始密钥写入失败"
+    exit 1
+}
+_merge_config || exit 1
 cat <<EOF >"/etc/systemd/system/${BIN_KERNEL_NAME}.service"
 [Unit]
 Description=$BIN_KERNEL_NAME Daemon, A[nother] Clash Kernel.
@@ -57,11 +62,21 @@ ExecStart=${BIN_KERNEL} -d ${CLASH_BASE_DIR} -f ${CLASH_CONFIG_RUNTIME}
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
+systemctl daemon-reload || {
+    _failcat "systemd 配置加载失败"
+    exit 1
+}
 # systemctl enable "$BIN_KERNEL_NAME" >&/dev/null || _failcat '💥' "设置自启失败" && _okcat '🚀' "已设置开机自启"
+systemctl start "$BIN_KERNEL_NAME" || {
+    _failcat '启动失败: 执行 "clashstatus" 查看日志'
+    exit 1
+}
+systemctl is-active --quiet "$BIN_KERNEL_NAME" || {
+    _failcat '启动失败: 执行 "clashstatus" 查看日志'
+    exit 1
+}
 
 clashui
-clashsecret "$(_get_random_val)" >/dev/null
 clashsecret
 clashctl
 # shellcheck disable=SC2016
