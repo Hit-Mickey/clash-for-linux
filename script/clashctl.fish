@@ -5,6 +5,7 @@ clashsecret \
 clashtun \
 clashmixin \
 clashupdate \
+clashupgrade \
 clashhelp
 
 set -gx fish_version $FISH_VERSION

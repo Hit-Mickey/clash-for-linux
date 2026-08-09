@@ -283,55 +283,176 @@ function clashmixin() {
 }
 
 function clashupgrade() {
+    local channel="release"
+    local release_api="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
+    local arch asset_pattern fallback_pattern
+    local tmp_dir release_json asset_url asset_name asset_digest expected_sha256
+    local archive_file kernel_file backup_file download_url downloaded
+
     case "$1" in
     -h | --help)
         cat <<EOF
 
-- 升级当前版本
+- 升级到最新稳定版
   clashupgrade
-
-- 升级到稳定版
   clashupgrade release
 
-- 升级到测试版
+- 升级到最新测试版
   clashupgrade alpha
 
 EOF
         return 0
         ;;
-    release)
-        channel="release"
+    "" | release)
         ;;
     alpha)
         channel="alpha"
+        release_api="https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/Prerelease-Alpha"
         ;;
     *)
-        channel=""
+        _failcat "不支持的升级通道：$1，仅支持 release 或 alpha"
+        return 1
         ;;
     esac
 
-    _okcat "请求内核升级..."
-    _get_ui_port
-    local secret=$(sudo "$BIN_YQ" '.secret // ""' "$CLASH_CONFIG_RUNTIME")
-    local res=$(
-        curl -X POST \
-            --silent \
-            --noproxy "*" \
+    case "$(uname -m)" in
+    x86_64 | amd64)
+        asset_pattern='mihomo-linux-amd64-compatible-.*\.gz$'
+        fallback_pattern='mihomo-linux-amd64-.*\.gz$'
+        ;;
+    i386 | i486 | i586 | i686)
+        asset_pattern='mihomo-linux-386-.*\.gz$'
+        ;;
+    aarch64 | arm64)
+        asset_pattern='mihomo-linux-arm64-.*\.gz$'
+        ;;
+    armv7*)
+        asset_pattern='mihomo-linux-armv7-.*\.gz$'
+        ;;
+    armv6*)
+        asset_pattern='mihomo-linux-armv6-.*\.gz$'
+        ;;
+    armv*)
+        asset_pattern='mihomo-linux-armv5-.*\.gz$'
+        ;;
+    *)
+        _failcat "暂不支持当前架构：$(uname -m)"
+        return 1
+        ;;
+    esac
+
+    tmp_dir=$(mktemp -d) || {
+        _failcat "无法创建内核升级临时目录"
+        return 1
+    }
+    release_json="${tmp_dir}/release.json"
+    archive_file="${tmp_dir}/mihomo.gz"
+    kernel_file="${tmp_dir}/mihomo"
+    backup_file="${BIN_MIHOMO}.bak"
+
+    _okcat "获取 Mihomo ${channel} 版本信息..."
+    curl \
+        --silent \
+        --show-error \
+        --fail \
+        --location \
+        --connect-timeout 10 \
+        --max-time 30 \
+        --retry 2 \
+        --output "$release_json" \
+        "$release_api" || {
+        rm -rf "$tmp_dir"
+        _failcat "无法获取 GitHub Release 信息"
+        return 1
+    }
+
+    asset_url=$(sudo "$BIN_YQ" -r '.assets[].browser_download_url' "$release_json" |
+        grep -E -m 1 "/${asset_pattern}")
+    [ -z "$asset_url" ] && [ -n "$fallback_pattern" ] && {
+        asset_url=$(sudo "$BIN_YQ" -r '.assets[].browser_download_url' "$release_json" |
+            grep -E -m 1 "/${fallback_pattern}")
+    }
+    [ -n "$asset_url" ] || {
+        rm -rf "$tmp_dir"
+        _failcat "未找到适用于 $(uname -m) 的 Mihomo 内核"
+        return 1
+    }
+
+    asset_name=$(basename "$asset_url")
+    asset_digest=$(sudo "$BIN_YQ" -r ".assets[] | select(.name == \"$asset_name\") | .digest // \"\"" "$release_json")
+    expected_sha256=${asset_digest#sha256:}
+
+    _okcat "下载内核：$asset_name"
+    downloaded=false
+    for download_url in \
+        "https://gh-proxy.com/${asset_url}" \
+        "https://ghfast.top/${asset_url}" \
+        "https://ghproxy.net/${asset_url}" \
+        "https://github.moeyy.xyz/${asset_url}" \
+        "$asset_url"; do
+        [ "$download_url" != "$asset_url" ] && [ -z "$expected_sha256" ] && continue
+        rm -f "${archive_file}.part"
+        _okcat "尝试下载：$download_url"
+        curl \
+            --progress-bar \
+            --show-error \
+            --fail \
             --location \
-            -H "Authorization: Bearer $secret" \
-            "http://${EXT_IP}:${EXT_PORT}/upgrade?channel=$channel"
-    )
+            --connect-timeout 10 \
+            --max-time 300 \
+            --retry 2 \
+            --output "${archive_file}.part" \
+            "$download_url" || continue
+        gzip -t "${archive_file}.part" 2>/dev/null || continue
+        [ -z "$expected_sha256" ] ||
+            printf '%s  %s\n' "$expected_sha256" "${archive_file}.part" | sha256sum -c - >/dev/null 2>&1 || continue
+        mv -f "${archive_file}.part" "$archive_file"
+        downloaded=true
+        break
+    done
 
-    grep -qs '"status":"ok"' <<<"$res" && {
-        _okcat "内核升级成功"
-        return 0
+    [ "$downloaded" = true ] || {
+        rm -rf "$tmp_dir"
+        _failcat "所有 GitHub 下载地址均失败"
+        return 1
     }
-    grep 'already using latest version' <<<"$res" && {
-        _okcat "已是最新版本"
-        return 0
-    }
-    _failcat "升级请求失败，请检查网络或稍后重试"
 
+    gzip -dc "$archive_file" >"$kernel_file" && rm -f "$archive_file" || {
+        rm -rf "$tmp_dir"
+        _failcat "Mihomo 内核解压失败"
+        return 1
+    }
+    sudo chmod +x "$kernel_file" || {
+        rm -rf "$tmp_dir"
+        _failcat "无法为 Mihomo 内核设置执行权限"
+        return 1
+    }
+
+    sudo /usr/bin/install -m 0755 "$kernel_file" "${BIN_MIHOMO}.new" &&
+        sudo chmod +x "${BIN_MIHOMO}.new" &&
+        sudo "${BIN_MIHOMO}.new" -v >/dev/null 2>&1 &&
+        sudo /bin/cp -f "$BIN_MIHOMO" "$backup_file" &&
+        sudo /bin/mv -f "${BIN_MIHOMO}.new" "$BIN_MIHOMO" || {
+        sudo /bin/rm -f "${BIN_MIHOMO}.new" "$backup_file"
+        rm -rf "$tmp_dir"
+        _failcat "替换 Mihomo 内核失败，原内核未被修改"
+        return 1
+    }
+
+    _okcat "重启 Mihomo（Clash 内核）服务..."
+    sudo systemctl restart mihomo && sleep 1 && sudo systemctl is-active --quiet mihomo || {
+        _failcat "新内核启动失败，正在恢复旧内核..."
+        sudo /bin/cp -f "$backup_file" "$BIN_MIHOMO"
+        sudo chmod +x "$BIN_MIHOMO"
+        sudo systemctl restart mihomo
+        sudo /bin/rm -f "$backup_file"
+        rm -rf "$tmp_dir"
+        return 1
+    }
+
+    sudo /bin/rm -f "$backup_file"
+    rm -rf "$tmp_dir"
+    _okcat "Mihomo 内核升级成功，服务已重启"
 }
 
 function clashctl() {

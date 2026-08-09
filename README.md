@@ -43,7 +43,7 @@ git clone --branch master --depth 1 https://gh-proxy.org/https://github.com/Hit-
 ```
 
 ### 版本一览
-mihomo版本：v1.19.19，后续可通过`clashupgrade`进行升级
+mihomo版本：v1.19.19，后续可通过 `clashupgrade` 从 GitHub Release 直接升级稳定版，或通过 `clashupgrade alpha` 升级测试版。下载会依次尝试常见 GitHub 加速代理和官方地址，并在校验、替换成功后重启 Mihomo 服务。
 
 安装完后请通过`clashui`和`clashsecret`查看端口和初始密码
 
@@ -79,7 +79,7 @@ Commands:
     mixin    [-e|-r]     Mixin 配置
     secret   [SECRET]    Web 密钥
     update   [auto|log]  更新订阅
-    upgrade     		 更新内核
+    upgrade  [release|alpha]  更新 Mihomo 内核
 ```
 
 💡`clashon` 等同于 `clashctl on`，`Tab` 补全更方便！
