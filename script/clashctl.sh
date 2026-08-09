@@ -1,6 +1,11 @@
 # shellcheck disable=SC2148
 # shellcheck disable=SC2155
 
+_has_gsettings_proxy_schema() {
+    command -v gsettings >/dev/null 2>&1 &&
+        gsettings list-schemas 2>/dev/null | grep -qx 'org.gnome.system.proxy'
+}
+
 _set_system_proxy() {
     local auth=$(sudo "$BIN_YQ" '.authentication[0] // ""' "$CLASH_CONFIG_RUNTIME")
     [ -n "$auth" ] && auth=$auth@
@@ -21,7 +26,7 @@ _set_system_proxy() {
     export NO_PROXY=$no_proxy
 
     # 设置 GNOME 桌面系统代理（如果有）
-    if command -v gsettings >/dev/null 2>&1; then
+    if _has_gsettings_proxy_schema; then
         [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
         echo "🖥️ 检测到桌面环境，正在设置系统 GUI 代理..."
         
@@ -49,7 +54,7 @@ _unset_system_proxy() {
     unset ALL_PROXY
     unset no_proxy
     unset NO_PROXY
-    if command -v gsettings >/dev/null 2>&1; then
+    if _has_gsettings_proxy_schema; then
         [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
         gsettings set org.gnome.system.proxy mode 'none'
     fi
@@ -82,7 +87,10 @@ function clashoff() {
 }
 
 clashrestart() {
-    { clashoff && clashon; } >&/dev/null
+    sudo systemctl restart "$BIN_KERNEL_NAME" >/dev/null || {
+        _failcat '重启失败: 执行 "clashstatus" 查看日志'
+        return 1
+    }
 }
 
 function clashproxy() {
