@@ -287,7 +287,7 @@ function clashupgrade() {
     local release_api="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
     local arch asset_pattern fallback_pattern
     local tmp_dir release_json asset_url asset_name asset_digest expected_sha256
-    local archive_file kernel_file backup_file download_url downloaded
+    local release_version current_version archive_file kernel_file backup_file download_url downloaded
 
     case "$1" in
     -h | --help)
@@ -366,6 +366,9 @@ EOF
         return 1
     }
 
+    release_version=$(sudo "$BIN_YQ" -r '.tag_name // ""' "$release_json" |
+        grep -Eo '[vV]?[0-9]+(\.[0-9]+){1,3}' | head -n 1 | sed 's/^[vV]//')
+
     asset_url=$(sudo "$BIN_YQ" -r '.assets[].browser_download_url' "$release_json" |
         grep -E -m 1 "/${asset_pattern}")
     [ -z "$asset_url" ] && [ -n "$fallback_pattern" ] && {
@@ -377,6 +380,21 @@ EOF
         _failcat "未找到适用于 $(uname -m) 的 Mihomo 内核"
         return 1
     }
+
+    [ -z "$release_version" ] &&
+        release_version=$(printf '%s\n' "$asset_url" |
+            grep -Eo '[vV]?[0-9]+(\.[0-9]+){1,3}' | head -n 1 | sed 's/^[vV]//')
+    current_version=$(sudo "$BIN_MIHOMO" version 2>/dev/null |
+        grep -Eo '[vV]?[0-9]+(\.[0-9]+){1,3}' | head -n 1 | sed 's/^[vV]//')
+    [ -z "$current_version" ] &&
+        current_version=$(sudo "$BIN_MIHOMO" -v 2>/dev/null |
+            grep -Eo '[vV]?[0-9]+(\.[0-9]+){1,3}' | head -n 1 | sed 's/^[vV]//')
+    if [ -n "$release_version" ] && [ -n "$current_version" ] &&
+        [ "$(printf '%s\n' "$release_version" "$current_version" | sort -V | tail -n 1)" = "$current_version" ]; then
+        rm -rf "$tmp_dir"
+        _okcat "当前 Mihomo 已是最新版本：v$current_version"
+        return 0
+    fi
 
     asset_name=$(basename "$asset_url")
     asset_digest=$(sudo "$BIN_YQ" -r ".assets[] | select(.name == \"$asset_name\") | .digest // \"\"" "$release_json")
