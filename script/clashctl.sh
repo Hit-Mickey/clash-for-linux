@@ -287,7 +287,8 @@ function clashupgrade() {
     local release_api="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
     local arch asset_pattern fallback_pattern
     local tmp_dir release_json asset_url asset_name asset_digest expected_sha256
-    local release_version current_version archive_file kernel_file backup_file download_url downloaded
+    local release_version release_build current_version current_build current_version_output local_is_alpha
+    local archive_file kernel_file backup_file download_url downloaded
 
     case "$1" in
     -h | --help)
@@ -384,16 +385,29 @@ EOF
     [ -z "$release_version" ] &&
         release_version=$(printf '%s\n' "$asset_url" |
             grep -Eo '[vV]?[0-9]+(\.[0-9]+){1,3}' | head -n 1 | sed 's/^[vV]//')
-    current_version=$(sudo "$BIN_MIHOMO" version 2>/dev/null |
+    current_version_output=$(timeout 5 sudo "$BIN_MIHOMO" -v 2>/dev/null)
+    current_version=$(printf '%s\n' "$current_version_output" |
         grep -Eo '[vV]?[0-9]+(\.[0-9]+){1,3}' | head -n 1 | sed 's/^[vV]//')
-    [ -z "$current_version" ] &&
-        current_version=$(sudo "$BIN_MIHOMO" -v 2>/dev/null |
-            grep -Eo '[vV]?[0-9]+(\.[0-9]+){1,3}' | head -n 1 | sed 's/^[vV]//')
+    release_build=$(printf '%s\n' "$asset_url" |
+        grep -Eio 'alpha[-._]?[[:alnum:]]+' | head -n 1 | tr '[:upper:]' '[:lower:]')
+    current_build=$(printf '%s\n' "$current_version_output" |
+        grep -Eio 'alpha[-._]?[[:alnum:]]+' | head -n 1 | tr '[:upper:]' '[:lower:]')
+    local_is_alpha=false
+    printf '%s\n' "$current_version_output" | grep -iqE 'alpha|prerelease' && local_is_alpha=true
+
     if [ -n "$release_version" ] && [ -n "$current_version" ] &&
         [ "$(printf '%s\n' "$release_version" "$current_version" | sort -V | tail -n 1)" = "$current_version" ]; then
-        rm -rf "$tmp_dir"
-        _okcat "当前 Mihomo 已是最新版本：v$current_version"
-        return 0
+        if [ "$channel" = "release" ] && [ "$local_is_alpha" = false ]; then
+            rm -rf "$tmp_dir"
+            _okcat "当前 Mihomo 已是最新版本：v$current_version（release）"
+            return 0
+        fi
+        if [ "$channel" = "alpha" ] && [ -n "$release_build" ] &&
+            [ "$release_build" = "$current_build" ]; then
+            rm -rf "$tmp_dir"
+            _okcat "当前 Mihomo 已是最新版本：v$current_version（alpha）"
+            return 0
+        fi
     fi
 
     asset_name=$(basename "$asset_url")
