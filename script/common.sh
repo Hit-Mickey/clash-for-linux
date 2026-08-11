@@ -180,7 +180,8 @@ _download_install_asset() {
             --fail \
             --location \
             --connect-timeout 10 \
-            --max-time 300 \
+            --speed-limit 10240 \
+            --speed-time 30 \
             --output "${dest}.part" \
             "$download_url" || continue
         _validate_install_asset "${dest}.part" "$type" "$expected_sha256" || continue

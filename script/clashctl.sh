@@ -469,7 +469,8 @@ EOF
             --fail \
             --location \
             --connect-timeout 10 \
-            --max-time 300 \
+            --speed-limit 10240 \
+            --speed-time 30 \
             --output "${archive_file}.part" \
             "$download_url" || continue
         gzip -t "${archive_file}.part" 2>/dev/null || continue
