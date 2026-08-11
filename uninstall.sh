@@ -1,5 +1,8 @@
 # shellcheck disable=SC2148
 # shellcheck disable=SC1091
+PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
+cd "$PROJECT_DIR" || exit 1
+
 . script/common.sh >&/dev/null
 . script/clashctl.sh >&/dev/null
 
@@ -38,5 +41,5 @@ find /run/user -maxdepth 2 -type f -name 'clash-for-linux.env' -delete 2>/dev/nu
     sed -i '/clashupdate/d' "$CLASH_CRON_TAB"
 _set_rc unset
 
-_okcat '✨' '已完整卸载：服务、程序、代理、定时任务和 Shell 配置均已清除'
+_okcat '✨' '已完整卸载'
 _quit
