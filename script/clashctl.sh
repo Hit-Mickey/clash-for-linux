@@ -463,7 +463,7 @@ EOF
         "https://ghproxy.net/${asset_url}"; do
         rm -f "${archive_file}.part"
         _okcat "尝试下载：$download_url"
-        curl \
+        if ! curl \
             --progress-bar \
             --show-error \
             --fail \
@@ -472,11 +472,24 @@ EOF
             --speed-limit 10240 \
             --speed-time 30 \
             --output "${archive_file}.part" \
-            "$download_url" || continue
-        gzip -t "${archive_file}.part" 2>/dev/null || continue
-        [ -z "$expected_sha256" ] ||
-            printf '%s  %s\n' "$expected_sha256" "${archive_file}.part" | sha256sum -c - >/dev/null 2>&1 || continue
+            "$download_url"; then
+            rm -f "${archive_file}.part"
+            _failcat '下载失败，切换下一个地址'
+            continue
+        fi
+        if ! gzip -t "${archive_file}.part" 2>/dev/null; then
+            rm -f "${archive_file}.part"
+            _failcat '压缩包校验失败，切换下一个地址'
+            continue
+        fi
+        if [ -n "$expected_sha256" ] &&
+            ! printf '%s  %s\n' "$expected_sha256" "${archive_file}.part" | sha256sum -c - >/dev/null 2>&1; then
+            rm -f "${archive_file}.part"
+            _failcat 'SHA-256 校验失败，切换下一个地址'
+            continue
+        fi
         mv -f "${archive_file}.part" "$archive_file"
+        _okcat '✅' "下载成功：$download_url"
         downloaded=true
         break
     done

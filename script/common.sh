@@ -174,8 +174,9 @@ _download_install_asset() {
         "https://ghfast.top/${url}" \
         "https://ghproxy.net/${url}"; do
         rm -f "${dest}.part"
-        curl \
-            --silent \
+        _okcat '🌐' "尝试下载：$download_url"
+        if ! curl \
+            --progress-bar \
             --show-error \
             --fail \
             --location \
@@ -183,9 +184,18 @@ _download_install_asset() {
             --speed-limit 10240 \
             --speed-time 30 \
             --output "${dest}.part" \
-            "$download_url" || continue
-        _validate_install_asset "${dest}.part" "$type" "$expected_sha256" || continue
+            "$download_url"; then
+            rm -f "${dest}.part"
+            _failcat '下载失败，切换下一个地址'
+            continue
+        fi
+        if ! _validate_install_asset "${dest}.part" "$type" "$expected_sha256"; then
+            rm -f "${dest}.part"
+            _failcat '文件校验失败，切换下一个地址'
+            continue
+        fi
         mv -f "${dest}.part" "$dest"
+        _okcat '✅' "下载成功：$download_url"
         return 0
     done
     rm -f "${dest}.part"
@@ -262,6 +272,7 @@ _prepare_install_resources() {
         ' "$release_json")
         expected_sha256=$asset_digest
     fi
+    [ -n "$asset_name" ] && _okcat '⏳' "正在下载最新 Mihomo：$asset_name"
     if [ -n "$asset_url" ] && _download_install_asset "${INSTALL_TMP_DIR}/mihomo.gz" "$asset_url" gzip "$expected_sha256"; then
         ZIP_MIHOMO="${INSTALL_TMP_DIR}/mihomo.gz"
         _okcat '✅' "已下载最新 Mihomo：$asset_name"
