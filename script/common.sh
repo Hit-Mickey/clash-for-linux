@@ -23,7 +23,7 @@ RESOURCES_CONFIG="${RESOURCES_BASE_DIR}/config.yaml"
 RESOURCES_CONFIG_MIXIN="${RESOURCES_BASE_DIR}/mixin.yaml"
 
 ZIP_BASE_DIR="${RESOURCES_BASE_DIR}/zip"
-FALLBACK_SUBCONVERTER=$(find "$ZIP_BASE_DIR" -maxdepth 1 -type f -name 'subconverter*.tar.gz' | sort | head -n 1)
+FALLBACK_SUBCONVERTER="${ZIP_BASE_DIR}/subconverter_linux64.tar.gz"
 FALLBACK_UI="${ZIP_BASE_DIR}/metacubexd-compressed-dist.tgz"
 FALLBACK_ZASHBOARD="${ZIP_BASE_DIR}/zashboard-dist.zip"
 FALLBACK_COUNTRY_MMDB="${RESOURCES_BASE_DIR}/Country.mmdb"
@@ -279,7 +279,11 @@ _download_install_asset() {
     local url=$2
     local type=$3
     local expected_sha256=$4
-    local proxies proxy download_url
+    local proxies proxy download_url action='下载'
+
+    case "$url" in
+    https://api.github.com/*) action='读取' ;;
+    esac
 
     proxies=$(_get_github_proxies)
     [ -n "$proxies" ] || proxies='__OFFICIAL__'
@@ -287,7 +291,7 @@ _download_install_asset() {
     while IFS= read -r proxy; do
         [ "$proxy" = '__OFFICIAL__' ] && download_url=$url || download_url="${proxy}/${url}"
         rm -f "${dest}.part"
-        _okcat '🌐' "尝试下载：$download_url"
+        _okcat '🌐' "尝试${action}：$download_url"
         if curl \
             --progress-bar \
             --show-error \
@@ -297,12 +301,12 @@ _download_install_asset() {
             "$download_url"; then
             if _validate_install_asset "${dest}.part" "$type" "$expected_sha256"; then
                 mv -f "${dest}.part" "$dest"
-                _okcat '✅' "下载成功：$download_url"
+                _okcat '✅' "${action}成功：$download_url"
                 return 0
             fi
-            _failcat "文件校验失败：$download_url"
+            _failcat "${action}内容校验失败：$download_url"
         else
-            _failcat "下载失败：$download_url"
+            _failcat "${action}失败：$download_url"
         fi
         rm -f "${dest}.part"
     done <<EOF
@@ -550,6 +554,12 @@ function _quit() {
     _cleanup_install_tmp
     [ "$user" = root ] && exec "$_SHELL" -i
     exec sudo -u "$user" -- "$_SHELL" -i
+}
+
+_install_section() {
+    printf '\n%s\n' '------------------------------------------------------------'
+    printf ' %s\n' "$1"
+    printf '%s\n' '------------------------------------------------------------'
 }
 
 function _error_quit() {

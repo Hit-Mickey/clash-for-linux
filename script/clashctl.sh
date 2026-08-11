@@ -285,17 +285,13 @@ _upgrade_clashui() {
 }
 
 _change_clashui() {
-    local current_ui selected_ui confirm choice
+    local current_ui selected_ui choice
 
     current_ui=$(_get_current_ui) || return 1
     printf '%s\n' "当前 Web 控制面板：$current_ui"
     printf '%s\n' '当前支持的面板：'
     printf '%s\n' '  1. metacubexd'
     printf '%s\n' '  2. zashboard'
-    printf '是否确认选择面板进行切换或升级？[y/N]：'
-    read -r confirm
-    case "$confirm" in y | Y | yes | YES) ;; *) _okcat '已取消'; return 0 ;; esac
-
     printf '请选择面板 [1/2]：'
     read -r choice
     case "$choice" in
@@ -708,6 +704,9 @@ function clashctl() {
     off)
         clashoff
         ;;
+    restart)
+        clashrestart
+        ;;
     ui)
         shift
         clashui "$@"
@@ -760,14 +759,15 @@ Usage:
 Commands:
     on                      开启代理
     off                     关闭代理
-    proxy    [on|off]       系统代理
+    restart                 重启 Mihomo 服务
+    proxy    [on|off|status] 系统代理
     ui       [upgrade|change] 面板地址/更新/切换面板
     ghproxy  [-e]           查看/编辑 GitHub 加速地址
     status                  内核状况
     tun      [on|off]       Tun 模式
     mixin    [-e|-r]        Mixin 配置
     secret   [SECRET]       Web 密钥
-    update   [auto|log]     更新订阅
+    update   [URL|auto|log] 更新订阅
     upgrade                 升级稳定版内核
 
 EOF

@@ -82,18 +82,36 @@ Usage:
 Commands:
     on                   开启代理
     off                  关闭代理
+    restart              重启 Mihomo 服务
     ui       [upgrade|change] 面板地址/更新/切换面板
     ghproxy  [-e]        查看/编辑 GitHub 加速地址
     status               内核状况
-    proxy    [on|off]    系统代理
+    proxy    [on|off|status] 系统代理
     tun      [on|off]    Tun 模式
     mixin    [-e|-r]     Mixin 配置
     secret   [SECRET]    Web 密钥
-    update   [auto|log]  更新订阅
+    update   [URL|auto|log] 更新订阅
     upgrade              更新 Mihomo 稳定版内核
 ```
 
-💡`clashon` 等同于 `clashctl on`，`Tab` 补全更方便！
+每个子命令也有对应的独立快捷命令：
+
+| `clashctl` 用法 | 快捷命令 | 作用 |
+| --- | --- | --- |
+| `clashctl on` | `clashon` | 启动 Mihomo 并设置终端/桌面代理 |
+| `clashctl off` | `clashoff` | 停止 Mihomo 并清除当前代理环境 |
+| `clashctl restart` | `clashrestart` | 重启 Mihomo 服务 |
+| `clashctl status` | `clashstatus` | 查看 systemd 服务状态和日志 |
+| `clashctl proxy on\|off\|status` | `clashproxy on\|off\|status` | 单独管理系统代理 |
+| `clashctl ui [upgrade\|change]` | `clashui [upgrade\|change]` | 查看、升级或切换 Web 面板 |
+| `clashctl secret [密码]` | `clashsecret [密码]` | 查看或修改 Web 密钥 |
+| `clashctl update [URL\|auto\|log]` | `clashupdate [URL\|auto\|log]` | 更新订阅、设置自动更新或查看日志 |
+| `clashctl mixin [-e\|-r]` | `clashmixin [-e\|-r]` | 查看/编辑 Mixin 或查看运行配置 |
+| `clashctl tun [on\|off]` | `clashtun [on\|off]` | 查看或切换 TUN 模式 |
+| `clashctl upgrade` | `clashupgrade` | 升级 Mihomo 最新稳定版 |
+| `clashctl ghproxy [-e]` | `ghproxy [-e]` | 查看或编辑 GitHub 加速地址 |
+
+快捷命令适合日常使用，`clashctl` 形式便于统一记忆，两者效果相同。
 
 ### 优雅启停（终端环境+桌面环境）
 
@@ -114,6 +132,16 @@ $ clashoff
 
 - 启停代理内核的同时，设置系统代理。
 - 亦可通过 `clashproxy` 单独控制系统代理。
+
+服务管理常用命令：
+
+```bash
+clashstatus          # 查看 Mihomo systemd 状态
+clashrestart         # 重启 Mihomo
+clashproxy status    # 查看系统代理状态
+clashproxy on        # 只开启系统代理，不改变服务状态
+clashproxy off       # 只关闭系统代理，不停止 Mihomo
+```
 
 ### Web 控制台
 
@@ -144,11 +172,12 @@ $ clashui change
 当前支持的面板：
   1. metacubexd
   2. zashboard
+请选择面板 [1/2]：
 ```
 
 - 通过浏览器打开 Web 控制台，实现可视化操作：切换节点、查看日志等。
 - `clashui upgrade` 会识别当前选择的面板并检测版本，仅在存在更新时下载对应面板的最新稳定版。
-- `clashui change` 会显示当前面板并要求确认。选择相同面板时执行升级，选择不同面板时下载并切换，同时更新 `external-ui` 并重启 Mihomo。
+- `clashui change` 会显示当前面板并直接要求选择。选择相同面板时执行版本检测和升级，选择不同面板时下载并切换，同时更新 `external-ui` 并重启 Mihomo。
 - 面板切换或更新后请强制刷新浏览器缓存。
 - 若暴露到公网使用建议定期更换密钥。
 
@@ -156,7 +185,8 @@ $ clashui change
 
 ```bash
 $ ghproxy
-😼 GitHub 下载：官方链接
+😼 GitHub 加速地址（按顺序尝试）：
+  https://gh-proxy.org
 
 $ ghproxy -e
 ```
@@ -164,6 +194,7 @@ $ ghproxy -e
 - 配置文件每行填写一个 GitHub 加速地址；也支持使用分号或空格分隔；空文件表示只使用 GitHub 官方链接。
 - 配置多个地址后，下载和更新会依次尝试这些地址，不再回退到官方链接。
 - `ghproxy -e` 保存后立即生效，适用于 `clashupgrade` 和 `clashui upgrade` 等后续下载。
+- 编辑时每行写一个地址；清空文件并保存即可改为只使用 GitHub 官方链接。
 
 ### 更新订阅
 
@@ -181,6 +212,9 @@ $ clashupdate log
 ```
 
 - `clashupdate` 会记住上次更新成功的订阅链接，后续执行无需再指定。
+- `clashupdate URL` 立即使用新链接更新；`clashupdate` 不带参数时沿用上次成功的链接。
+- `clashupdate auto [URL]` 创建每两天执行一次的定时任务；不提供 URL 时使用当前保存的链接。
+- `clashupdate log` 查看最近的订阅更新记录。
 - 可通过 `crontab -e` 修改定时更新频率及订阅链接。
 - 通过配置文件进行更新：[pr#24](https://github.com/nelvko/clash-for-linux-install/pull/24#issuecomment-2565054701)
 
@@ -214,6 +248,28 @@ $ clashmixin -r
 - 持久化：将自定义配置项写入`Mixin`（`mixin.yaml`），而非原订阅配置（`config.yaml`），可避免更新订阅后丢失。
 - 配置加载：代理内核启动时使用 `runtime.yaml`，它是订阅配置与 `Mixin` 配置的合并结果集，相同配置项以 `Mixin` 为准。
 - 注意：因此直接修改 `config.yaml` 并不会生效。
+
+`clashmixin` 默认通过 `less` 查看 `/opt/clash/mixin.yaml`；`clashmixin -e` 固定调用 `vim` 编辑。保存成功后会自动合并配置、验证并重启 Mihomo。`clashmixin -r` 只读查看最终生效的 `/opt/clash/runtime.yaml`。
+
+### Web 密钥
+
+```bash
+clashsecret          # 查看当前密钥
+clashsecret 123456   # 设置新密钥并重启 Mihomo
+```
+
+Web 控制台连接 Mihomo 时需要使用该密钥。修改成功后会自动更新运行配置并重启服务。
+
+### 升级 Mihomo
+
+```bash
+clashupgrade
+```
+
+- 只读取官方 latest Release，即只暴露稳定版升级渠道。
+- 会比较当前版本；已经是最新版时不会重复下载。
+- 新内核会先验证可执行性并备份旧内核；重启失败时自动恢复。
+- GitHub API 和内核下载遵循 `ghproxy` 中保存的地址顺序。
 
 ### 卸载
 

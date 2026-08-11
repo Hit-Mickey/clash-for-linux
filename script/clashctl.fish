@@ -1,6 +1,7 @@
 set fn_arr \
 clashui \
 clashstatus \
+clashrestart \
 clashsecret \
 clashtun \
 clashmixin \
