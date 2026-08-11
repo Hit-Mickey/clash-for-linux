@@ -23,13 +23,14 @@ RESOURCES_CONFIG="${RESOURCES_BASE_DIR}/config.yaml"
 RESOURCES_CONFIG_MIXIN="${RESOURCES_BASE_DIR}/mixin.yaml"
 
 ZIP_BASE_DIR="${RESOURCES_BASE_DIR}/zip"
-ZIP_SUBCONVERTER=$(find "$ZIP_BASE_DIR" -maxdepth 1 -type f -name 'subconverter*.tar.gz' | sort | head -n 1)
-FALLBACK_UI="${ZIP_BASE_DIR}/metacubexd-gh-pages.zip"
+FALLBACK_SUBCONVERTER=$(find "$ZIP_BASE_DIR" -maxdepth 1 -type f -name 'subconverter*.tar.gz' | sort | head -n 1)
+FALLBACK_UI="${ZIP_BASE_DIR}/metacubexd-compressed-dist.tgz"
 FALLBACK_ZASHBOARD="${ZIP_BASE_DIR}/zashboard-dist.zip"
 FALLBACK_COUNTRY_MMDB="${RESOURCES_BASE_DIR}/Country.mmdb"
 ZIP_MIHOMO=''
 ZIP_YQ=''
 ZIP_UI=''
+ZIP_SUBCONVERTER=''
 UI_ARCHIVE_TYPE=''
 UI_VERSION=''
 UI_NAME=''
@@ -325,8 +326,8 @@ _fallback_install_asset() {
 }
 
 _prepare_install_resources() {
-    local machine_arch mihomo_arch yq_arch mihomo_pattern
-    local release_json asset_url asset_name asset_digest expected_sha256 fallback
+    local machine_arch mihomo_arch yq_arch subconverter_arch mihomo_pattern
+    local release_json asset_url asset_name asset_digest expected_sha256 fallback fallback_type
     local ui_release_json ui_asset_url ui_asset_digest ui_expected_sha256
 
     machine_arch=$(uname -m)
@@ -334,18 +335,22 @@ _prepare_install_resources() {
     x86_64 | amd64)
         mihomo_arch='amd64-compatible'
         yq_arch='amd64'
+        subconverter_arch='linux64'
         ;;
     i386 | i486 | i586 | i686)
         mihomo_arch='386'
         yq_arch='386'
+        subconverter_arch='linux32'
         ;;
     aarch64 | arm64)
         mihomo_arch='arm64'
         yq_arch='arm64'
+        subconverter_arch='aarch64'
         ;;
     armv7*)
         mihomo_arch='armv7'
         yq_arch='arm'
+        subconverter_arch='armv7'
         ;;
     armv6*)
         mihomo_arch='armv6'
@@ -402,6 +407,24 @@ _prepare_install_resources() {
         ZIP_YQ=$(_fallback_install_asset 'yq' "$fallback" tar.gz) || return 1
     fi
 
+    _okcat '⏳' '正在下载最新 subconverter...'
+    if [ -n "$subconverter_arch" ] && _download_install_asset \
+        "${INSTALL_TMP_DIR}/subconverter.tar.gz" \
+        "https://github.com/tindy2013/subconverter/releases/latest/download/subconverter_${subconverter_arch}.tar.gz" \
+        tar.gz ''; then
+        ZIP_SUBCONVERTER="${INSTALL_TMP_DIR}/subconverter.tar.gz"
+        _okcat '✅' "已下载最新 subconverter：$subconverter_arch"
+    else
+        fallback=$(find "$ZIP_BASE_DIR" -maxdepth 1 -type f \
+            -name "subconverter_${subconverter_arch}.tar.gz" | sort -V | tail -n 1)
+        [ -n "$fallback" ] || fallback=$FALLBACK_SUBCONVERTER
+        case "$(basename "$fallback")" in
+        "subconverter_${subconverter_arch}.tar.gz") ;;
+        *) fallback='' ;;
+        esac
+        ZIP_SUBCONVERTER=$(_fallback_install_asset 'subconverter' "$fallback" tar.gz) || return 1
+    fi
+
     _okcat '⏳' "正在获取最新 $UI_NAME 稳定版..."
     ui_release_json="${INSTALL_TMP_DIR}/${UI_NAME}-release.json"
     if _download_install_asset "$ui_release_json" "$UI_RELEASE_API" json ''; then
@@ -429,11 +452,18 @@ _prepare_install_resources() {
         _okcat '✅' "已下载 $UI_NAME：$UI_VERSION"
     else
         case "$UI_NAME" in
-        metacubexd) fallback=$FALLBACK_UI ;;
-        zashboard) fallback=$FALLBACK_ZASHBOARD ;;
+        metacubexd)
+            fallback=$FALLBACK_UI
+            fallback_type='ui.tar.gz'
+            UI_ARCHIVE_TYPE='tar.gz'
+            ;;
+        zashboard)
+            fallback=$FALLBACK_ZASHBOARD
+            fallback_type='zip'
+            UI_ARCHIVE_TYPE='zip'
+            ;;
         esac
-        ZIP_UI=$(_fallback_install_asset "$UI_NAME" "$fallback" zip) || return 1
-        UI_ARCHIVE_TYPE='zip'
+        ZIP_UI=$(_fallback_install_asset "$UI_NAME" "$fallback" "$fallback_type") || return 1
         UI_VERSION=''
     fi
 

@@ -54,7 +54,7 @@ git clone --branch master --depth 1 https://github.com/Hit-Mickey/clash-for-linu
 
 安装时还会提示选择 Web 控制面板：输入 `1` 或直接回车选择 metacubexd，输入 `2` 选择 zashboard。安装完成后，`mixin.yaml` 和 `runtime.yaml` 中的 `external-ui` 会明确写入当前面板名称。
 
-每次安装都会下载最新版 `mihomo`、`yq`、所选面板和 `Country.mmdb`（即 country.mmdb）。所有配置的下载地址均失败或文件校验失败时，才使用 `resources` 中随仓库提供的对应离线资源。安装后的 Mihomo 与面板均只提供稳定版升级：通过 `clashupgrade` 更新 Mihomo，通过 `clashui upgrade` 更新当前面板。
+每次安装都会下载最新版 `mihomo`、`yq`、`subconverter`、所选面板和 `Country.mmdb`（即 country.mmdb）。subconverter 使用 [tindy2013/subconverter 官方最新 Release](https://github.com/tindy2013/subconverter/releases/latest)。所有配置的下载地址均失败或文件校验失败时，才使用 `resources` 中随仓库提供的对应官方稳定版离线资源。安装后的 Mihomo 与面板均只提供稳定版升级：通过 `clashupgrade` 更新 Mihomo，通过 `clashui upgrade` 更新当前面板。
 
 API 和资源文件下载均不设置 curl 连接超时、总时长或低速限制。
 
