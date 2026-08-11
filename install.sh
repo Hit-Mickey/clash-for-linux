@@ -3,16 +3,12 @@
 . script/common.sh >&/dev/null
 . script/clashctl.sh >&/dev/null
 
-_install_divider
 _valid_env
 
 [ -d "$CLASH_BASE_DIR" ] && _error_quit "请先执行卸载脚本,以清除安装路径：$CLASH_BASE_DIR"
 
-_install_divider
 _configure_github_proxies || _error_quit 'GitHub 下载方式配置失败'
-_install_divider
 _configure_ui || _error_quit 'Web 控制面板配置失败'
-_install_divider
 trap _cleanup_install_tmp EXIT
 _prepare_install_resources || _error_quit '安装资源准备失败'
 _get_kernel
@@ -34,7 +30,6 @@ _set_bin "$RESOURCES_BIN_DIR"
 "$BIN_MIHOMO" -v >/dev/null 2>&1 || _error_quit 'Mihomo 可执行文件验证失败'
 "$BIN_YQ" --version >/dev/null 2>&1 || _error_quit 'yq 可执行文件验证失败'
 [ -x "$BIN_SUBCONVERTER" ] || _error_quit 'subconverter 可执行文件验证失败'
-_install_divider
 url=""
 _valid_config "$RESOURCES_CONFIG" || {
     # 检查变量 url 是否为空
@@ -49,7 +44,6 @@ _valid_config "$RESOURCES_CONFIG" || {
     _valid_config "$RESOURCES_CONFIG" || _error_quit "配置无效，请检查配置：$RESOURCES_CONFIG，转换日志：$BIN_SUBCONVERTER_LOG"
 }
 _okcat '✅' '配置可用'
-_install_divider
 mkdir "$CLASH_BASE_DIR" || _error_quit "无法创建安装目录：$CLASH_BASE_DIR"
 printf '%s\n' "$url" >"$CLASH_CONFIG_URL" || _error_quit '无法保存订阅地址'
 _save_github_proxies || _error_quit '无法保存 GitHub 加速地址配置'
@@ -74,7 +68,6 @@ ui_index=$(find "$ui_extract_dir" -type f -name index.html | head -n 1)
 [ -z "$UI_VERSION" ] ||
     printf '%s\n' "$UI_VERSION" >"${CLASH_BASE_DIR}/${UI_NAME}/.version"
 
-_install_divider
 _set_rc || _error_quit 'Shell 配置安装失败'
 _set_bin
 secret=$(_get_random_val)
@@ -111,7 +104,6 @@ systemctl is-active --quiet "$BIN_KERNEL_NAME" || {
     exit 1
 }
 
-_install_divider
 clashui
 clashsecret
 clashctl
