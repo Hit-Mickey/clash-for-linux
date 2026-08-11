@@ -5,7 +5,8 @@
 
 <img src="./Picture/README/image-20260120164005163.png" alt="image-20260120164005163" style="zoom:80%;" />
 
-- 默认安装 `mihomo` 内核，[可选安装](https://github.com/nelvko/clash-for-linux-install/wiki/FAQ#%E5%AE%89%E8%A3%85-clash-%E5%86%85%E6%A0%B8) `clash`。
+- 安装最新稳定版 `mihomo` 内核。
+- Web 控制台仅保留 [metacubexd](https://github.com/MetaCubeX/metacubexd)。
 - 支持使用 [subconverter](https://github.com/tindy2013/subconverter) 进行本地订阅转换。
 - 多架构支持，适配主流 `Linux` 发行版：`CentOS 7.6`、`Debian 12`、`Ubuntu 22.04.1 LTS`、`Ubuntu 24.04.1 LTS`。
 
@@ -13,7 +14,7 @@
 
 本项目来自[clash-for-linux-install](https://github.com/nelvko/clash-for-linux-install)，根据个人需要重新进行了修改，修改地方如下：
 
-1. 添加主流web-ui控制台（[metacubexd](https://github.com/MetaCubeX/metacubexd)，[Yacd-meta](https://github.com/MetaCubeX/Yacd-meta)，[Yacd](https://github.com/haishanh/yacd)），默认Yacd-meta。
+1. Web 控制台固定使用 [metacubexd](https://github.com/MetaCubeX/metacubexd)。
 
 2. 修复了上游项目兼顾 普通用户 与 `sudo`用户 而造成的命令混乱。
 
@@ -37,28 +38,26 @@
 下述命令适用于 `x86_64` 架构
 
 ```bash
-git clone --branch master --depth 1 https://gh-proxy.org/https://github.com/Hit-Mickey/clash-for-linux.git clash \
+git clone --branch master --depth 1 https://github.com/Hit-Mickey/clash-for-linux.git clash \
   && cd clash \
   && sudo bash install.sh
 ```
 
-### 版本一览
-mihomo版本：v1.19.19，后续可通过 `clashupgrade` 从 GitHub Release 直接升级稳定版，或通过 `clashupgrade alpha` 升级测试版。下载会依次尝试常见 GitHub 加速代理和官方地址，并在校验、替换成功后重启 Mihomo 服务。
+### 安装资源
+
+每次安装都会优先下载最新版 `mihomo`、`yq`、`metacubexd` 和 `Country.mmdb`（即 country.mmdb）。脚本会先尝试 GitHub 官方地址；连接超时、下载报错或文件校验失败后，依次切换到 `hubproxy-speedtest.mingqian.online`、`gh-proxy.org` 等加速地址；全部失败时才使用 `resources` 中随仓库提供的离线资源。安装后仍可通过 `clashupgrade` 升级 Mihomo 稳定版，或通过 `clashupgrade alpha` 升级测试版。
 
 安装完后请通过`clashui`和`clashsecret`查看端口和初始密码
 
 > 如遇问题，请在查阅[常见问题](https://github.com/nelvko/clash-for-linux-install/wiki/FAQ)及 [issue](https://github.com/nelvko/clash-for-linux-install/issues?q=is%3Aissue) 未果后进行反馈。
 
-- 上述克隆命令使用了[加速前缀](https://gh-proxy.com/)，如失效请更换其他[可用链接](https://gh-proxy.com/)。
+- 上述克隆命令使用 GitHub 官方地址；安装资源下载失败时，脚本会自动切换加速地址。
 - 默认通过远程订阅获取配置进行安装，本地配置安装详见：在`resources`目录中新建`config.yaml`，将配置粘贴进去再执行安装脚本。
 - 没有订阅？[click me](https://wd-gold.net/aff.php?aff=12861)。
 
 ### 自定义安装
 
-1. 可以根据喜好自己提前修改mixin.yaml中的相关配置，**其中留空的变量名不要随意删除**，当然也可以在安装完后进行修改。
-2. 若需更换web控制台，需要修改的地方有两处：
-   1. `script`文件夹下`common.sh`的`ZIP_UI="${ZIP_BASE_DIR}/Yacd-meta-gh-pages.zip"`，修改压缩包名称即可，可用的压缩包在`resources/zip`文件夹下查看，当然也可以自己下载后放到该文件夹下。
-   2. `resources`文件夹下`mixin.yaml`中的`external-ui:`，将名字改为对应web控制台的名字，可选项（yacd-meta，yacd，metacubexd）。如果是自己下载的压缩包，则为解压后的文件夹名称。
+可以根据需要提前修改 `mixin.yaml` 中的配置，**其中留空的变量名不要随意删除**，也可以在安装完成后修改。Web 控制台目录固定为 `metacubexd`。
 
 ### 命令一览
 
@@ -184,6 +183,8 @@ $ clashmixin -r
 ```bash
 sudo bash uninstall.sh
 ```
+
+卸载脚本会清除 Mihomo 服务、`/opt/clash`、安装时生成的 `resources/bin`、订阅定时任务、Shell/Fish 配置、桌面代理以及 Fish 代理环境临时文件（也会兼容清理旧版 `/var/proxy`）。仓库内自带的离线资源和用户预先放入 `resources/config.yaml` 的配置不会删除。
 
 ## 常见问题
 

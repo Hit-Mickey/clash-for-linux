@@ -3,21 +3,40 @@
 . script/common.sh >&/dev/null
 . script/clashctl.sh >&/dev/null
 
-_valid_env
+_is_root || _error_quit "需要 root 或 sudo 权限执行"
 
-clashoff >&/dev/null
-
+# 无论服务当前是否存在或能否停止，都继续清理其余安装痕迹。
+# clash 是旧版项目可能留下的服务名，保留兼容清理。
 for service in mihomo clash; do
-    systemctl stop "$service" >&/dev/null
-    systemctl disable "$service" >&/dev/null
-    rm -f "/etc/systemd/system/${service}.service"
+    systemctl disable --now "$service" >/dev/null 2>&1 || systemctl stop "$service" >/dev/null 2>&1
+    rm -f -- "/etc/systemd/system/${service}.service"
+    rm -f -- "/etc/systemd/system/multi-user.target.wants/${service}.service"
 done
-systemctl daemon-reload
+systemctl daemon-reload >/dev/null 2>&1
+systemctl reset-failed mihomo clash >/dev/null 2>&1
 
-rm -rf "$CLASH_BASE_DIR"
-rm -rf "$RESOURCES_BIN_DIR"
-sed -i '/clashupdate/d' "$CLASH_CRON_TAB" >&/dev/null
+# 清除安装过程中设置的桌面代理。sudo 安装时需要操作原用户的 dconf。
+if command -v gsettings >/dev/null 2>&1; then
+    user_uid=$(id -u "$CLASH_USER" 2>/dev/null)
+    if [ "$CLASH_USER" = root ]; then
+        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${user_uid}/bus" \
+            gsettings set org.gnome.system.proxy mode 'none' >/dev/null 2>&1
+    elif [ -n "$user_uid" ]; then
+        sudo -u "$CLASH_USER" env \
+            XDG_RUNTIME_DIR="/run/user/${user_uid}" \
+            DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${user_uid}/bus" \
+            gsettings set org.gnome.system.proxy mode 'none' >/dev/null 2>&1
+    fi
+fi
+_unset_system_proxy
+
+[ "$CLASH_BASE_DIR" = '/opt/clash' ] && rm -rf -- "$CLASH_BASE_DIR"
+[ "$RESOURCES_BIN_DIR" = './resources/bin' ] && rm -rf -- "$RESOURCES_BIN_DIR"
+rm -f -- /var/proxy
+find /run/user -maxdepth 2 -type f -name 'clash-for-linux.env' -delete 2>/dev/null
+[ -n "$CLASH_CRON_TAB" ] && [ -f "$CLASH_CRON_TAB" ] &&
+    sed -i '/clashupdate/d' "$CLASH_CRON_TAB"
 _set_rc unset
 
-_okcat '✨' '已卸载，相关配置已清除'
+_okcat '✨' '已完整卸载：服务、程序、代理、定时任务和 Shell 配置均已清除'
 _quit

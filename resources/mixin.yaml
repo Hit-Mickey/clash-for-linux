@@ -10,7 +10,7 @@ authentication:
 unified-delay: true
 tcp-concurrent: true
 external-controller: "0.0.0.0:9000"
-external-ui: yacd-meta
+external-ui: metacubexd
 secret: 
 
 profile:

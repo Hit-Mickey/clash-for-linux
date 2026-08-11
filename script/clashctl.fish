@@ -40,7 +40,10 @@ function clashctl
 end
 
 function clashon
-    bash -i -c 'clashon; sudo tee /var/proxy >/dev/null <<EOF
+    set -l proxy_env_file "/run/user/"(id -u)"/clash-for-linux.env"
+    bash -i -c 'clashon || exit 1
+umask 077
+cat >"$1" <<EOF
 export http_proxy=$http_proxy
 export https_proxy=$http_proxy
 export HTTP_PROXY=$http_proxy
@@ -51,9 +54,10 @@ export ALL_PROXY=$all_proxy
 
 export no_proxy=$no_proxy
 export NO_PROXY=$no_proxy
-EOF'
+EOF' -- "$proxy_env_file"; or return 1
 
-    source /var/proxy
+    source "$proxy_env_file"
+    rm -f "$proxy_env_file"
 end
 
 function clashoff

@@ -331,7 +331,7 @@ function clashmixin() {
 
 function clashupgrade() {
     local channel="release"
-    local release_api="https://hubproxy-speedtest.mingqian.online/https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
+    local release_api="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
     local arch asset_pattern fallback_pattern
     local tmp_dir release_json asset_url asset_name asset_digest expected_sha256
     local release_version release_build current_version current_build current_version_output local_is_alpha
@@ -355,7 +355,7 @@ EOF
         ;;
     alpha)
         channel="alpha"
-        release_api="https://hubproxy-speedtest.mingqian.online/https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/Prerelease-Alpha"
+        release_api="https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/Prerelease-Alpha"
         ;;
     *)
         _failcat "不支持的升级通道：$1，仅支持 release 或 alpha"
@@ -399,16 +399,7 @@ EOF
     backup_file="${BIN_MIHOMO}.bak"
 
     _okcat "获取 Mihomo ${channel} 版本信息..."
-    curl \
-        --silent \
-        --show-error \
-        --fail \
-        --location \
-        --connect-timeout 10 \
-        --max-time 30 \
-        --retry 2 \
-        --output "$release_json" \
-        "$release_api" || {
+    _download_install_asset "$release_json" "$release_api" json '' || {
         rm -rf "$tmp_dir"
         _failcat "无法获取 GitHub Release 信息"
         return 1
@@ -464,14 +455,12 @@ EOF
     _okcat "下载内核：$asset_name"
     downloaded=false
     for download_url in \
+        "$asset_url" \
         "https://hubproxy-speedtest.mingqian.online/${asset_url}" \
         "https://gh-proxy.org/${asset_url}" \
         "https://gh-proxy.com/${asset_url}" \
         "https://ghfast.top/${asset_url}" \
-        "https://ghproxy.net/${asset_url}" \
-        "https://github.moeyy.xyz/${asset_url}" \
-        "$asset_url"; do
-        [ "$download_url" != "$asset_url" ] && [ -z "$expected_sha256" ] && continue
+        "https://ghproxy.net/${asset_url}"; do
         rm -f "${archive_file}.part"
         _okcat "尝试下载：$download_url"
         curl \
@@ -481,7 +470,6 @@ EOF
             --location \
             --connect-timeout 10 \
             --max-time 300 \
-            --retry 2 \
             --output "${archive_file}.part" \
             "$download_url" || continue
         gzip -t "${archive_file}.part" 2>/dev/null || continue

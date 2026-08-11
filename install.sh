@@ -7,15 +7,27 @@ _valid_env
 
 [ -d "$CLASH_BASE_DIR" ] && _error_quit "请先执行卸载脚本,以清除安装路径：$CLASH_BASE_DIR"
 
+trap _cleanup_install_tmp EXIT
+_prepare_install_resources || _error_quit '安装资源准备失败'
 _get_kernel
 
-/usr/bin/install -D <(gzip -dc "$ZIP_KERNEL") "${RESOURCES_BIN_DIR}/$BIN_KERNEL_NAME"
-tar -xf "$ZIP_SUBCONVERTER" -C "$RESOURCES_BIN_DIR"
-tar -xf "$ZIP_YQ" -C "${RESOURCES_BIN_DIR}"
-# shellcheck disable=SC2086
-/bin/mv -f ${RESOURCES_BIN_DIR}/yq_* "${RESOURCES_BIN_DIR}/yq"
+[ "$RESOURCES_BIN_DIR" = './resources/bin' ] || _error_quit '安装资源目录异常'
+rm -rf -- "$RESOURCES_BIN_DIR"
+mkdir -p "$RESOURCES_BIN_DIR" || _error_quit '无法创建安装资源目录'
+_validate_install_asset "$ZIP_SUBCONVERTER" tar.gz '' || _error_quit 'subconverter 离线资源无效'
+/usr/bin/install -Dm 0755 <(gzip -dc "$ZIP_KERNEL") "${RESOURCES_BIN_DIR}/$BIN_KERNEL_NAME" ||
+    _error_quit 'Mihomo 解压失败'
+tar -xzf "$ZIP_SUBCONVERTER" -C "$RESOURCES_BIN_DIR" || _error_quit 'subconverter 解压失败'
+tar -xzf "$ZIP_YQ" -C "$RESOURCES_BIN_DIR" || _error_quit 'yq 解压失败'
+yq_extracted=$(find "$RESOURCES_BIN_DIR" -maxdepth 1 -type f -name 'yq_linux_*' | head -n 1)
+[ -n "$yq_extracted" ] || _error_quit 'yq 压缩包中未找到可执行文件'
+/usr/bin/install -m 0755 "$yq_extracted" "${RESOURCES_BIN_DIR}/yq" || _error_quit 'yq 安装失败'
+rm -f -- "$yq_extracted"
 
 _set_bin "$RESOURCES_BIN_DIR"
+"$BIN_MIHOMO" -v >/dev/null 2>&1 || _error_quit 'Mihomo 可执行文件验证失败'
+"$BIN_YQ" --version >/dev/null 2>&1 || _error_quit 'yq 可执行文件验证失败'
+[ -x "$BIN_SUBCONVERTER" ] || _error_quit 'subconverter 可执行文件验证失败'
 url=""
 _valid_config "$RESOURCES_CONFIG" || {
     # 检查变量 url 是否为空
@@ -30,18 +42,24 @@ _valid_config "$RESOURCES_CONFIG" || {
     _valid_config "$RESOURCES_CONFIG" || _error_quit "配置无效，请检查配置：$RESOURCES_CONFIG，转换日志：$BIN_SUBCONVERTER_LOG"
 }
 _okcat '✅' '配置可用'
-mkdir "$CLASH_BASE_DIR"
-echo "$url" >"$CLASH_CONFIG_URL"
+mkdir "$CLASH_BASE_DIR" || _error_quit "无法创建安装目录：$CLASH_BASE_DIR"
+printf '%s\n' "$url" >"$CLASH_CONFIG_URL" || _error_quit '无法保存订阅地址'
 
-/bin/cp -rf "$SCRIPT_BASE_DIR" "$CLASH_BASE_DIR"
-/bin/ls "$RESOURCES_BASE_DIR" | grep -Ev 'zip|png' | xargs -I {} /bin/cp -rf "${RESOURCES_BASE_DIR}/{}" "$CLASH_BASE_DIR"
-if [[ "$ZIP_UI" == *.zip ]]; then
-    unzip -o "$ZIP_UI" -d "$CLASH_BASE_DIR"
-elif [[ "$ZIP_UI" == *.tar.gz ]]; then
-    tar -xzf "$ZIP_UI" -C "$CLASH_BASE_DIR"
-fi
+/bin/cp -rf "$SCRIPT_BASE_DIR" "$CLASH_BASE_DIR" || _error_quit '脚本文件安装失败'
+/bin/cp -rf "$RESOURCES_BIN_DIR" "${CLASH_BASE_DIR}/bin" || _error_quit '程序文件安装失败'
+/usr/bin/install -m 0644 "$RESOURCES_CONFIG" "$CLASH_CONFIG_RAW" || _error_quit '订阅配置安装失败'
+/usr/bin/install -m 0644 "$RESOURCES_CONFIG_MIXIN" "$CLASH_CONFIG_MIXIN" || _error_quit 'Mixin 配置安装失败'
+/usr/bin/install -m 0644 "$COUNTRY_MMDB" "${CLASH_BASE_DIR}/Country.mmdb" ||
+    _error_quit 'Country.mmdb 安装失败'
+ui_extract_dir="${INSTALL_TMP_DIR}/ui"
+mkdir -p "$ui_extract_dir"
+unzip -oq "$ZIP_UI" -d "$ui_extract_dir"
+ui_index=$(find "$ui_extract_dir" -type f -name index.html | head -n 1)
+[ -n "$ui_index" ] || _error_quit 'metacubexd 压缩包中未找到 index.html'
+/bin/cp -rf "$(dirname "$ui_index")" "${CLASH_BASE_DIR}/metacubexd" ||
+    _error_quit 'metacubexd 安装失败'
 
-_set_rc
+_set_rc || _error_quit 'Shell 配置安装失败'
 _set_bin
 secret=$(_get_random_val)
 sudo "$BIN_YQ" -i ".secret = \"$secret\"" "$CLASH_CONFIG_MIXIN" || {
@@ -61,6 +79,7 @@ ExecStart=${BIN_KERNEL} -d ${CLASH_BASE_DIR} -f ${CLASH_CONFIG_RUNTIME}
 [Install]
 WantedBy=multi-user.target
 EOF
+[ $? -eq 0 ] || _error_quit 'systemd 服务文件写入失败'
 
 systemctl daemon-reload || {
     _failcat "systemd 配置加载失败"
@@ -82,5 +101,4 @@ clashctl
 # shellcheck disable=SC2016
 [ "$SUDO_USER" != 'root' ] && _okcat '请执行 clashon 开启代理环境'
 _okcat '🎉' 'enjoy 🎉'
-clashupgrade
 _quit
