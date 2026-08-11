@@ -331,7 +331,7 @@ function clashmixin() {
 
 function clashupgrade() {
     local channel="release"
-    local release_api="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
+    local release_api="https://hubproxy-speedtest.mingqian.online/https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
     local arch asset_pattern fallback_pattern
     local tmp_dir release_json asset_url asset_name asset_digest expected_sha256
     local release_version release_build current_version current_build current_version_output local_is_alpha
@@ -355,7 +355,7 @@ EOF
         ;;
     alpha)
         channel="alpha"
-        release_api="https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/Prerelease-Alpha"
+        release_api="https://hubproxy-speedtest.mingqian.online/https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/Prerelease-Alpha"
         ;;
     *)
         _failcat "不支持的升级通道：$1，仅支持 release 或 alpha"
@@ -464,6 +464,8 @@ EOF
     _okcat "下载内核：$asset_name"
     downloaded=false
     for download_url in \
+        "https://hubproxy-speedtest.mingqian.online/${asset_url}" \
+        "https://gh-proxy.org/${asset_url}" \
         "https://gh-proxy.com/${asset_url}" \
         "https://ghfast.top/${asset_url}" \
         "https://ghproxy.net/${asset_url}" \
