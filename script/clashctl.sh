@@ -134,7 +134,7 @@ function clashstatus() {
     sudo systemctl status "$BIN_KERNEL_NAME" "$@"
 }
 
-function clashui() {
+_show_clashui() {
     _get_ui_port
     # 公网ip
     # ifconfig.me
@@ -155,6 +155,231 @@ function clashui() {
     printf "║                                               ║\n"
     printf "╚═══════════════════════════════════════════════╝\n"
     printf "\n"
+}
+
+_get_current_ui() {
+    local ui
+    ui=$(sudo "$BIN_YQ" -r '."external-ui" // ""' "$CLASH_CONFIG_MIXIN" 2>/dev/null)
+    case "$ui" in
+    metacubexd | zashboard) printf '%s\n' "$ui" ;;
+    *)
+        _failcat "当前 external-ui 配置不受支持：${ui:-未配置}"
+        return 1
+        ;;
+    esac
+}
+
+_install_ui_release() {
+    local target_ui=$1
+    local tmp_dir release_json archive_file extract_dir ui_index ui_dir
+    local latest_version latest_normalized current_version current_normalized
+    local asset_url asset_digest expected_sha256
+    local current_dir new_dir old_dir
+
+    _set_ui_metadata "$target_ui" || {
+        _failcat "不支持的 Web 控制面板：$target_ui"
+        return 1
+    }
+    current_dir="${CLASH_BASE_DIR}/${target_ui}"
+    new_dir="${current_dir}.new"
+    old_dir="${current_dir}.old"
+
+    tmp_dir=$(mktemp -d /tmp/clash-ui.XXXXXX) || {
+        _failcat '无法创建面板升级临时目录'
+        return 1
+    }
+    release_json="${tmp_dir}/release.json"
+    archive_file="${tmp_dir}/${target_ui}.${UI_ARCHIVE_EXTENSION}"
+    extract_dir="${tmp_dir}/ui"
+
+    _okcat '⏳' "正在获取最新 $target_ui 稳定版..."
+    _download_install_asset "$release_json" "$UI_RELEASE_API" json '' || {
+        rm -rf -- "$tmp_dir"
+        _failcat "无法获取 $target_ui 稳定版信息，面板未修改"
+        return 1
+    }
+
+    latest_version=$(sudo "$BIN_YQ" -r '.tag_name // ""' "$release_json")
+    asset_url=$(sudo "$BIN_YQ" -r ".assets[] | select(.name == \"$UI_ASSET_NAME\") | .browser_download_url" \
+        "$release_json" | head -n 1)
+    asset_digest=$(sudo "$BIN_YQ" -r ".assets[] | select(.name == \"$UI_ASSET_NAME\") | .digest // \"\"" \
+        "$release_json" | head -n 1)
+    expected_sha256=${asset_digest#sha256:}
+    [ -n "$latest_version" ] && [ -n "$asset_url" ] || {
+        rm -rf -- "$tmp_dir"
+        _failcat '最新稳定版信息不完整，当前面板未修改'
+        return 1
+    }
+
+    current_version=$(cat "${current_dir}/.version" 2>/dev/null)
+    latest_normalized=${latest_version#v}
+    latest_normalized=${latest_normalized#V}
+    current_normalized=${current_version#v}
+    current_normalized=${current_normalized#V}
+    if [ -n "$current_normalized" ] &&
+        [ "$(printf '%s\n' "$latest_normalized" "$current_normalized" | sort -V | tail -n 1)" = "$current_normalized" ]; then
+        rm -rf -- "$tmp_dir"
+        _okcat "$target_ui 已是最新稳定版：$current_version"
+        return 0
+    fi
+
+    _okcat '⏳' "正在下载 $target_ui：$latest_version"
+    _download_install_asset "$archive_file" "$asset_url" "$UI_ASSET_TYPE" "$expected_sha256" || {
+        rm -rf -- "$tmp_dir"
+        _failcat "$target_ui 下载失败，面板未修改"
+        return 1
+    }
+    mkdir -p "$extract_dir"
+    case "$UI_ARCHIVE_TYPE" in
+    tar.gz) tar -xzf "$archive_file" -C "$extract_dir" ;;
+    zip) unzip -oq "$archive_file" -d "$extract_dir" ;;
+    *) false ;;
+    esac || {
+        rm -rf -- "$tmp_dir"
+        _failcat "$target_ui 解压失败，面板未修改"
+        return 1
+    }
+    ui_index=$(find "$extract_dir" -type f -name index.html | head -n 1)
+    [ -n "$ui_index" ] || {
+        rm -rf -- "$tmp_dir"
+        _failcat '压缩包中未找到 index.html，当前面板未修改'
+        return 1
+    }
+    ui_dir=$(dirname "$ui_index")
+
+    sudo rm -rf -- "$new_dir" "$old_dir"
+    sudo /bin/cp -rf "$ui_dir" "$new_dir" &&
+        printf '%s\n' "$latest_version" | sudo tee "${new_dir}/.version" >/dev/null &&
+        sudo test -f "${new_dir}/index.html" || {
+        sudo rm -rf -- "$new_dir"
+        rm -rf -- "$tmp_dir"
+        _failcat '新面板准备失败，当前面板未修改'
+        return 1
+    }
+    if [ -d "$current_dir" ]; then
+        sudo /bin/mv "$current_dir" "$old_dir" || {
+            sudo rm -rf -- "$new_dir"
+            rm -rf -- "$tmp_dir"
+            _failcat '无法备份当前面板'
+            return 1
+        }
+    fi
+    sudo /bin/mv "$new_dir" "$current_dir" || {
+        [ ! -d "$old_dir" ] || sudo /bin/mv "$old_dir" "$current_dir"
+        sudo rm -rf -- "$new_dir"
+        rm -rf -- "$tmp_dir"
+        _failcat '面板替换失败，已恢复原面板'
+        return 1
+    }
+
+    sudo rm -rf -- "$old_dir"
+    rm -rf -- "$tmp_dir"
+    _okcat '✅' "$target_ui 已准备为稳定版 $latest_version"
+}
+
+_upgrade_clashui() {
+    local current_ui
+    current_ui=$(_get_current_ui) || return 1
+    _install_ui_release "$current_ui" || return 1
+    _okcat '请在浏览器中强制刷新页面'
+}
+
+_change_clashui() {
+    local current_ui selected_ui confirm choice
+
+    current_ui=$(_get_current_ui) || return 1
+    printf '%s\n' "当前 Web 控制面板：$current_ui"
+    printf '%s\n' '当前支持的面板：'
+    printf '%s\n' '  1. metacubexd'
+    printf '%s\n' '  2. zashboard'
+    printf '是否确认选择面板进行切换或升级？[y/N]：'
+    read -r confirm
+    case "$confirm" in y | Y | yes | YES) ;; *) _okcat '已取消'; return 0 ;; esac
+
+    printf '请选择面板 [1/2]：'
+    read -r choice
+    case "$choice" in
+    1) selected_ui=metacubexd ;;
+    2) selected_ui=zashboard ;;
+    *)
+        _failcat '无效选择，请输入 1 或 2'
+        return 1
+        ;;
+    esac
+
+    if [ "$selected_ui" = "$current_ui" ]; then
+        _okcat "所选面板与当前面板相同，将升级 $current_ui"
+        _install_ui_release "$current_ui" || return 1
+        _okcat '请在浏览器中强制刷新页面'
+        return 0
+    fi
+
+    _install_ui_release "$selected_ui" || return 1
+    sudo "$BIN_YQ" -i ".\"external-ui\" = \"$selected_ui\"" "$CLASH_CONFIG_MIXIN" || {
+        _failcat '无法写入面板配置'
+        return 1
+    }
+    _merge_config && clashrestart || {
+        _failcat '面板切换失败，正在恢复原配置'
+        sudo "$BIN_YQ" -i ".\"external-ui\" = \"$current_ui\"" "$CLASH_CONFIG_MIXIN"
+        _merge_config >/dev/null 2>&1
+        clashrestart >/dev/null 2>&1
+        return 1
+    }
+    _okcat "Web 控制面板已从 $current_ui 切换为 $selected_ui"
+}
+
+function clashui() {
+    case "$1" in
+    "") _show_clashui ;;
+    upgrade) _upgrade_clashui ;;
+    change) _change_clashui ;;
+    *)
+        _failcat '用法：clashui [upgrade|change]'
+        return 1
+        ;;
+    esac
+}
+
+function ghproxy() {
+    local proxies tmp_file
+
+    case "$1" in
+    "")
+        proxies=$(_get_github_proxies)
+        if [ -z "$proxies" ]; then
+            _okcat 'GitHub 下载：官方链接'
+        else
+            _okcat 'GitHub 加速地址（按顺序尝试）：'
+            printf '%s\n' "$proxies" | sed 's/^/  /'
+        fi
+        ;;
+    -e | --edit)
+        sudo touch "$CLASH_GITHUB_PROXY" || {
+            _failcat '无法创建 GitHub 加速配置文件'
+            return 1
+        }
+        if command -v sudoedit >/dev/null 2>&1; then
+            sudoedit "$CLASH_GITHUB_PROXY" || return 1
+        else
+            sudo "${EDITOR:-vi}" "$CLASH_GITHUB_PROXY" || return 1
+        fi
+        tmp_file=$(mktemp) || return 1
+        _normalize_github_proxies <"$CLASH_GITHUB_PROXY" >"$tmp_file"
+        sudo /usr/bin/install -m 0644 "$tmp_file" "$CLASH_GITHUB_PROXY" || {
+            rm -f -- "$tmp_file"
+            _failcat '无法保存 GitHub 加速配置'
+            return 1
+        }
+        rm -f -- "$tmp_file"
+        _okcat 'GitHub 加速配置已更新'
+        ghproxy
+        ;;
+    *)
+        _failcat '用法：ghproxy [-e]'
+        return 1
+        ;;
+    esac
 }
 
 _merge_config() {
@@ -330,12 +555,10 @@ function clashmixin() {
 }
 
 function clashupgrade() {
-    local channel="release"
-    local release_api="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
     local arch asset_pattern fallback_pattern
     local tmp_dir release_json asset_url asset_name asset_digest expected_sha256
-    local release_version release_build current_version current_build current_version_output local_is_alpha
-    local archive_file kernel_file backup_file download_url downloaded
+    local release_version current_version current_version_output local_is_alpha
+    local archive_file kernel_file backup_file
 
     case "$1" in
     -h | --help)
@@ -343,22 +566,13 @@ function clashupgrade() {
 
 - 升级到最新稳定版
   clashupgrade
-  clashupgrade release
-
-- 升级到最新测试版
-  clashupgrade alpha
 
 EOF
         return 0
         ;;
-    "" | release)
-        ;;
-    alpha)
-        channel="alpha"
-        release_api="https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/Prerelease-Alpha"
-        ;;
+    "" | release) ;;
     *)
-        _failcat "不支持的升级通道：$1，仅支持 release 或 alpha"
+        _failcat '仅支持升级到最新稳定版：clashupgrade'
         return 1
         ;;
     esac
@@ -398,8 +612,8 @@ EOF
     kernel_file="${tmp_dir}/mihomo"
     backup_file="${BIN_MIHOMO}.bak"
 
-    _okcat "获取 Mihomo ${channel} 版本信息..."
-    _download_install_asset "$release_json" "$release_api" json '' || {
+    _okcat '获取 Mihomo 最新稳定版信息...'
+    _download_install_asset "$release_json" "$URL_MIHOMO_RELEASE_API" json '' || {
         rm -rf "$tmp_dir"
         _failcat "无法获取 GitHub Release 信息"
         return 1
@@ -426,26 +640,15 @@ EOF
     current_version_output=$(timeout 5 sudo "$BIN_MIHOMO" -v 2>/dev/null)
     current_version=$(printf '%s\n' "$current_version_output" |
         grep -Eo '[vV]?[0-9]+(\.[0-9]+){1,3}' | head -n 1 | sed 's/^[vV]//')
-    release_build=$(printf '%s\n' "$asset_url" |
-        grep -Eio 'alpha[-._]?[[:alnum:]]+' | head -n 1 | tr '[:upper:]' '[:lower:]')
-    current_build=$(printf '%s\n' "$current_version_output" |
-        grep -Eio 'alpha[-._]?[[:alnum:]]+' | head -n 1 | tr '[:upper:]' '[:lower:]')
     local_is_alpha=false
     printf '%s\n' "$current_version_output" | grep -iqE 'alpha|prerelease' && local_is_alpha=true
 
     if [ -n "$release_version" ] && [ -n "$current_version" ] &&
+        [ "$local_is_alpha" = false ] &&
         [ "$(printf '%s\n' "$release_version" "$current_version" | sort -V | tail -n 1)" = "$current_version" ]; then
-        if [ "$channel" = "release" ] && [ "$local_is_alpha" = false ]; then
-            rm -rf "$tmp_dir"
-            _okcat "当前 Mihomo 已是最新版本：v$current_version（release）"
-            return 0
-        fi
-        if [ "$channel" = "alpha" ] && [ -n "$release_build" ] &&
-            [ "$release_build" = "$current_build" ]; then
-            rm -rf "$tmp_dir"
-            _okcat "当前 Mihomo 已是最新版本：v$current_version（alpha）"
-            return 0
-        fi
+        rm -rf "$tmp_dir"
+        _okcat "当前 Mihomo 已是最新稳定版：v$current_version"
+        return 0
     fi
 
     asset_name=$(basename "$asset_url")
@@ -453,35 +656,9 @@ EOF
     expected_sha256=${asset_digest#sha256:}
 
     _okcat "下载内核：$asset_name"
-    downloaded=false
-    download_url="https://hubproxy-speedtest.mingqian.online/${asset_url}"
-    rm -f "${archive_file}.part"
-    _okcat "尝试下载：$download_url"
-    if curl \
-        --progress-bar \
-        --show-error \
-        --fail \
-        --location \
-        --output "${archive_file}.part" \
-        "$download_url"; then
-        if ! gzip -t "${archive_file}.part" 2>/dev/null; then
-            _failcat '压缩包校验失败'
-        elif [ -n "$expected_sha256" ] &&
-            ! printf '%s  %s\n' "$expected_sha256" "${archive_file}.part" | sha256sum -c - >/dev/null 2>&1; then
-            _failcat 'SHA-256 校验失败'
-        else
-            mv -f "${archive_file}.part" "$archive_file"
-            _okcat '✅' "下载成功：$download_url"
-            downloaded=true
-        fi
-    else
-        _failcat '下载失败'
-    fi
-    rm -f "${archive_file}.part"
-
-    [ "$downloaded" = true ] || {
+    _download_install_asset "$archive_file" "$asset_url" gzip "$expected_sha256" || {
         rm -rf "$tmp_dir"
-        _failcat "hubproxy 下载失败"
+        _failcat 'Mihomo 下载失败'
         return 1
     }
 
@@ -520,7 +697,7 @@ EOF
 
     sudo /bin/rm -f "$backup_file"
     rm -rf "$tmp_dir"
-    _okcat "Mihomo 内核升级成功，服务已重启"
+    _okcat "Mihomo 内核已升级到最新稳定版，服务已重启"
 }
 
 function clashctl() {
@@ -532,7 +709,12 @@ function clashctl() {
         clashoff
         ;;
     ui)
-        clashui
+        shift
+        clashui "$@"
+        ;;
+    ghproxy)
+        shift
+        ghproxy "$@"
         ;;
     status)
         shift
@@ -579,13 +761,14 @@ Commands:
     on                      开启代理
     off                     关闭代理
     proxy    [on|off]       系统代理
-    ui                      面板地址
+    ui       [upgrade|change] 面板地址/更新/切换面板
+    ghproxy  [-e]           查看/编辑 GitHub 加速地址
     status                  内核状况
     tun      [on|off]       Tun 模式
     mixin    [-e|-r]        Mixin 配置
     secret   [SECRET]       Web 密钥
     update   [auto|log]     更新订阅
-    upgrade                 升级内核
+    upgrade                 升级稳定版内核
 
 EOF
 }

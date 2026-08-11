@@ -33,6 +33,7 @@ if command -v gsettings >/dev/null 2>&1; then
 fi
 _unset_system_proxy
 
+[ "$CLASH_GITHUB_PROXY" = '/opt/clash/github-proxy' ] && rm -f -- "$CLASH_GITHUB_PROXY"
 [ "$CLASH_BASE_DIR" = '/opt/clash' ] && rm -rf -- "$CLASH_BASE_DIR"
 [ "$RESOURCES_BIN_DIR" = './resources/bin' ] && rm -rf -- "$RESOURCES_BIN_DIR"
 rm -f -- /var/proxy

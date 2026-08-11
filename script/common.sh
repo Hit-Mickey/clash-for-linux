@@ -10,7 +10,8 @@ if [ "$(id -u)" -eq 0 ] && ! command -v sudo >/dev/null 2>&1; then
 fi
 
 URL_MIHOMO_RELEASE_API='https://api.github.com/repos/MetaCubeX/mihomo/releases/latest'
-URL_METACUBEXD='https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip'
+URL_METACUBEXD_RELEASE_API='https://api.github.com/repos/MetaCubeX/metacubexd/releases/latest'
+URL_ZASHBOARD_RELEASE_API='https://api.github.com/repos/Zephyruso/zashboard/releases/latest'
 URL_COUNTRY_MMDB='https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb'
 
 SCRIPT_BASE_DIR='./script'
@@ -24,10 +25,18 @@ RESOURCES_CONFIG_MIXIN="${RESOURCES_BASE_DIR}/mixin.yaml"
 ZIP_BASE_DIR="${RESOURCES_BASE_DIR}/zip"
 ZIP_SUBCONVERTER=$(find "$ZIP_BASE_DIR" -maxdepth 1 -type f -name 'subconverter*.tar.gz' | sort | head -n 1)
 FALLBACK_UI="${ZIP_BASE_DIR}/metacubexd-gh-pages.zip"
+FALLBACK_ZASHBOARD="${ZIP_BASE_DIR}/zashboard-dist.zip"
 FALLBACK_COUNTRY_MMDB="${RESOURCES_BASE_DIR}/Country.mmdb"
 ZIP_MIHOMO=''
 ZIP_YQ=''
 ZIP_UI=''
+UI_ARCHIVE_TYPE=''
+UI_VERSION=''
+UI_NAME=''
+UI_RELEASE_API=''
+UI_ASSET_NAME=''
+UI_ASSET_TYPE=''
+UI_ARCHIVE_EXTENSION=''
 COUNTRY_MMDB=''
 INSTALL_TMP_DIR=''
 
@@ -39,6 +48,8 @@ CLASH_CONFIG_RAW_BAK="${CLASH_CONFIG_RAW}.bak"
 CLASH_CONFIG_MIXIN="${CLASH_BASE_DIR}/$(basename $RESOURCES_CONFIG_MIXIN)"
 CLASH_CONFIG_RUNTIME="${CLASH_BASE_DIR}/runtime.yaml"
 CLASH_UPDATE_LOG="${CLASH_BASE_DIR}/clashupdate.log"
+CLASH_GITHUB_PROXY="${CLASH_BASE_DIR}/github-proxy"
+GITHUB_PROXY_URLS=''
 
 _set_var() {
     local user=$USER
@@ -145,9 +156,13 @@ _validate_install_asset() {
     case "$type" in
     gzip) gzip -t "$file" >/dev/null 2>&1 || return 1 ;;
     tar.gz) tar -tzf "$file" >/dev/null 2>&1 || return 1 ;;
+    ui.tar.gz)
+        tar -tzf "$file" >/dev/null 2>&1 &&
+            tar -tzf "$file" 2>/dev/null | grep -Eq '(^|/)index\.html$' || return 1
+        ;;
     zip)
         unzip -tqq "$file" >/dev/null 2>&1 &&
-            unzip -l "$file" 2>/dev/null | grep -q '/index.html$' || return 1
+            unzip -Z1 "$file" 2>/dev/null | grep -Eq '(^|/)index\.html$' || return 1
         ;;
     mmdb)
         [ "$(wc -c <"$file")" -gt 100000 ] && grep -aq 'MaxMind.com' "$file" || return 1
@@ -159,33 +174,141 @@ _validate_install_asset() {
         printf '%s  %s\n' "$expected_sha256" "$file" | sha256sum -c - >/dev/null 2>&1
 }
 
+_normalize_github_proxies() {
+    tr ';\t ' '\n\n\n' |
+        sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's:/*$::' |
+        grep -E '^https?://[^/[:space:]]+' |
+        awk '!seen[$0]++'
+}
+
+_get_github_proxies() {
+    if [ -f "$CLASH_GITHUB_PROXY" ]; then
+        _normalize_github_proxies <"$CLASH_GITHUB_PROXY"
+    else
+        printf '%s\n' "$GITHUB_PROXY_URLS" | _normalize_github_proxies
+    fi
+}
+
+_configure_github_proxies() {
+    local choice input
+
+    printf '%s\n' '请选择 GitHub 下载方式：'
+    printf '%s\n' '  1. GitHub 官方链接'
+    printf '%s\n' '  2. 默认加速链接：https://gh-proxy.org'
+    printf '%s\n' '  3. 自定义加速链接'
+    printf '请选择 [1/2/3，回车默认 2]：'
+    read -r choice
+    [ -n "$choice" ] || choice=2
+
+    case "$choice" in
+    1) GITHUB_PROXY_URLS='' ;;
+    2) GITHUB_PROXY_URLS='https://gh-proxy.org' ;;
+    3)
+        printf '%s\n' '多个加速地址之间请使用分号（;）或空格隔开。'
+        printf '请输入自定义 GitHub 加速地址：'
+        read -r input
+        GITHUB_PROXY_URLS=$(printf '%s\n' "$input" | _normalize_github_proxies)
+        [ -n "$GITHUB_PROXY_URLS" ] || {
+            _failcat '未输入有效的加速地址'
+            return 1
+        }
+        ;;
+    *)
+        _failcat '无效选择，请输入 1、2 或 3'
+        return 1
+        ;;
+    esac
+
+    if [ -n "$GITHUB_PROXY_URLS" ]; then
+        _okcat '✅' '已配置 GitHub 加速地址：'
+        printf '%s\n' "$GITHUB_PROXY_URLS" | sed 's/^/  /'
+    else
+        _okcat '✅' '未配置加速地址，将使用 GitHub 官方链接'
+    fi
+}
+
+_set_ui_metadata() {
+    UI_NAME=$1
+    case "$UI_NAME" in
+    metacubexd)
+        UI_RELEASE_API=$URL_METACUBEXD_RELEASE_API
+        UI_ASSET_NAME='compressed-dist.tgz'
+        UI_ASSET_TYPE='ui.tar.gz'
+        UI_ARCHIVE_EXTENSION='tgz'
+        UI_ARCHIVE_TYPE='tar.gz'
+        ;;
+    zashboard)
+        UI_RELEASE_API=$URL_ZASHBOARD_RELEASE_API
+        UI_ASSET_NAME='dist.zip'
+        UI_ASSET_TYPE='zip'
+        UI_ARCHIVE_EXTENSION='zip'
+        UI_ARCHIVE_TYPE='zip'
+        ;;
+    *) return 1 ;;
+    esac
+}
+
+_configure_ui() {
+    local choice
+
+    printf '%s\n' '请选择 Web 控制面板：'
+    printf '%s\n' '  1. metacubexd'
+    printf '%s\n' '  2. zashboard'
+    printf '请选择 [1/2，回车默认 1]：'
+    read -r choice
+    [ -n "$choice" ] || choice=1
+    case "$choice" in
+    1) _set_ui_metadata metacubexd ;;
+    2) _set_ui_metadata zashboard ;;
+    *)
+        _failcat '无效选择，请输入 1 或 2'
+        return 1
+        ;;
+    esac
+    _okcat '✅' "已选择 Web 控制面板：$UI_NAME"
+}
+
+_save_github_proxies() {
+    : >"$CLASH_GITHUB_PROXY" || return 1
+    [ -z "$GITHUB_PROXY_URLS" ] || printf '%s\n' "$GITHUB_PROXY_URLS" >"$CLASH_GITHUB_PROXY"
+}
+
 _download_install_asset() {
     local dest=$1
     local url=$2
     local type=$3
     local expected_sha256=$4
-    local download_url="https://hubproxy-speedtest.mingqian.online/${url}"
+    local proxies proxy download_url
 
-    rm -f "${dest}.part"
-    _okcat '🌐' "尝试下载：$download_url"
-    if ! curl \
-        --progress-bar \
-        --show-error \
-        --fail \
-        --location \
-        --output "${dest}.part" \
-        "$download_url"; then
+    proxies=$(_get_github_proxies)
+    [ -n "$proxies" ] || proxies='__OFFICIAL__'
+
+    while IFS= read -r proxy; do
+        [ "$proxy" = '__OFFICIAL__' ] && download_url=$url || download_url="${proxy}/${url}"
         rm -f "${dest}.part"
-        _failcat '下载失败'
-        return 1
-    fi
-    if ! _validate_install_asset "${dest}.part" "$type" "$expected_sha256"; then
+        _okcat '🌐' "尝试下载：$download_url"
+        if curl \
+            --progress-bar \
+            --show-error \
+            --fail \
+            --location \
+            --output "${dest}.part" \
+            "$download_url"; then
+            if _validate_install_asset "${dest}.part" "$type" "$expected_sha256"; then
+                mv -f "${dest}.part" "$dest"
+                _okcat '✅' "下载成功：$download_url"
+                return 0
+            fi
+            _failcat "文件校验失败：$download_url"
+        else
+            _failcat "下载失败：$download_url"
+        fi
         rm -f "${dest}.part"
-        _failcat '文件校验失败'
-        return 1
-    fi
-    mv -f "${dest}.part" "$dest"
-    _okcat '✅' "下载成功：$download_url"
+    done <<EOF
+$proxies
+EOF
+
+    return 1
 }
 
 _fallback_install_asset() {
@@ -204,6 +327,7 @@ _fallback_install_asset() {
 _prepare_install_resources() {
     local machine_arch mihomo_arch yq_arch mihomo_pattern
     local release_json asset_url asset_name asset_digest expected_sha256 fallback
+    local ui_release_json ui_asset_url ui_asset_digest ui_expected_sha256
 
     machine_arch=$(uname -m)
     case "$machine_arch" in
@@ -278,12 +402,39 @@ _prepare_install_resources() {
         ZIP_YQ=$(_fallback_install_asset 'yq' "$fallback" tar.gz) || return 1
     fi
 
-    _okcat '⏳' '正在下载最新 metacubexd...'
-    if _download_install_asset "${INSTALL_TMP_DIR}/metacubexd.zip" "$URL_METACUBEXD" zip ''; then
-        ZIP_UI="${INSTALL_TMP_DIR}/metacubexd.zip"
-        _okcat '✅' '已下载最新 metacubexd'
+    _okcat '⏳' "正在获取最新 $UI_NAME 稳定版..."
+    ui_release_json="${INSTALL_TMP_DIR}/${UI_NAME}-release.json"
+    if _download_install_asset "$ui_release_json" "$UI_RELEASE_API" json ''; then
+        UI_VERSION=$(grep -E -m1 '"tag_name"[[:space:]]*:' "$ui_release_json" |
+            sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+        ui_asset_url=$(grep -Eo 'https://github.com/[^" ]+/releases/download/[^" ]+/[^" ]+' \
+            "$ui_release_json" | grep -F "/$UI_ASSET_NAME" | head -n 1)
+        ui_asset_digest=$(awk -v name="$UI_ASSET_NAME" '
+            index($0, "\"name\": \"" name "\"") { found=1 }
+            found && match($0, /"digest": "sha256:[0-9a-fA-F]+"/) {
+                value=substr($0, RSTART, RLENGTH)
+                sub(/^.*sha256:/, "", value)
+                sub(/"$/, "", value)
+                print value
+                exit
+            }
+        ' "$ui_release_json")
+        ui_expected_sha256=$ui_asset_digest
+    fi
+    [ -n "$UI_VERSION" ] && _okcat '⏳' "正在下载 $UI_NAME：$UI_VERSION"
+    if [ -n "$ui_asset_url" ] && _download_install_asset \
+        "${INSTALL_TMP_DIR}/${UI_NAME}.${UI_ARCHIVE_EXTENSION}" "$ui_asset_url" \
+        "$UI_ASSET_TYPE" "$ui_expected_sha256"; then
+        ZIP_UI="${INSTALL_TMP_DIR}/${UI_NAME}.${UI_ARCHIVE_EXTENSION}"
+        _okcat '✅' "已下载 $UI_NAME：$UI_VERSION"
     else
-        ZIP_UI=$(_fallback_install_asset 'metacubexd' "$FALLBACK_UI" zip) || return 1
+        case "$UI_NAME" in
+        metacubexd) fallback=$FALLBACK_UI ;;
+        zashboard) fallback=$FALLBACK_ZASHBOARD ;;
+        esac
+        ZIP_UI=$(_fallback_install_asset "$UI_NAME" "$fallback" zip) || return 1
+        UI_ARCHIVE_TYPE='zip'
+        UI_VERSION=''
     fi
 
     _okcat '⏳' '正在下载最新 Country.mmdb...'

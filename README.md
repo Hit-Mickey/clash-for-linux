@@ -6,7 +6,7 @@
 <img src="./Picture/README/image-20260120164005163.png" alt="image-20260120164005163" style="zoom:80%;" />
 
 - 安装最新稳定版 `mihomo` 内核。
-- Web 控制台仅保留 [metacubexd](https://github.com/MetaCubeX/metacubexd)。
+- Web 控制台支持 [metacubexd](https://github.com/MetaCubeX/metacubexd) 和 [zashboard](https://github.com/Zephyruso/zashboard)。
 - 支持使用 [subconverter](https://github.com/tindy2013/subconverter) 进行本地订阅转换。
 - 多架构支持，适配主流 `Linux` 发行版：`CentOS 7.6`、`Debian 12`、`Ubuntu 22.04.1 LTS`、`Ubuntu 24.04.1 LTS`。
 
@@ -14,7 +14,7 @@
 
 本项目来自[clash-for-linux-install](https://github.com/nelvko/clash-for-linux-install)，根据个人需要重新进行了修改，修改地方如下：
 
-1. Web 控制台固定使用 [metacubexd](https://github.com/MetaCubeX/metacubexd)。
+1. Web 控制台支持在安装时选择 metacubexd 或 zashboard，安装后也可随时切换。
 
 2. 修复了上游项目兼顾 普通用户 与 `sudo`用户 而造成的命令混乱。
 
@@ -45,7 +45,16 @@ git clone --branch master --depth 1 https://github.com/Hit-Mickey/clash-for-linu
 
 ### 安装资源
 
-每次安装都会通过 `hubproxy-speedtest.mingqian.online` 下载最新版 `mihomo`、`yq`、`metacubexd` 和 `Country.mmdb`（即 country.mmdb）。下载失败或文件校验失败时，才使用 `resources` 中随仓库提供的离线资源。安装后仍可通过 `clashupgrade` 升级 Mihomo 稳定版，或通过 `clashupgrade alpha` 升级测试版。
+安装开始时会提示选择 GitHub 下载方式：
+
+- 输入 `1`：所有 GitHub API 和资源下载均使用官方链接。
+- 输入 `2` 或直接回车：使用默认加速地址 `https://gh-proxy.org`。
+- 输入 `3`：自定义一个或多个加速地址，多个地址使用分号（`;`）或空格隔开；下载时严格按照填写顺序逐个尝试，不再尝试官方链接。
+- 加速配置保存在 `/opt/clash/github-proxy`，安装后可通过 `ghproxy` 查看、通过 `ghproxy -e` 编辑。
+
+安装时还会提示选择 Web 控制面板：输入 `1` 或直接回车选择 metacubexd，输入 `2` 选择 zashboard。安装完成后，`mixin.yaml` 和 `runtime.yaml` 中的 `external-ui` 会明确写入当前面板名称。
+
+每次安装都会下载最新版 `mihomo`、`yq`、所选面板和 `Country.mmdb`（即 country.mmdb）。所有配置的下载地址均失败或文件校验失败时，才使用 `resources` 中随仓库提供的对应离线资源。安装后的 Mihomo 与面板均只提供稳定版升级：通过 `clashupgrade` 更新 Mihomo，通过 `clashui upgrade` 更新当前面板。
 
 API 和资源文件下载均不设置 curl 连接超时、总时长或低速限制。
 
@@ -53,13 +62,13 @@ API 和资源文件下载均不设置 curl 连接超时、总时长或低速限�
 
 > 如遇问题，请在查阅[常见问题](https://github.com/nelvko/clash-for-linux-install/wiki/FAQ)及 [issue](https://github.com/nelvko/clash-for-linux-install/issues?q=is%3Aissue) 未果后进行反馈。
 
-- 上述克隆命令使用 GitHub 官方地址；安装资源下载失败时，脚本会自动切换加速地址。
+- 上述克隆命令使用 GitHub 官方地址；安装脚本内的资源下载方式由安装前输入的 GitHub 加速配置决定。
 - 默认通过远程订阅获取配置进行安装，本地配置安装详见：在`resources`目录中新建`config.yaml`，将配置粘贴进去再执行安装脚本。
 - 没有订阅？[click me](https://wd-gold.net/aff.php?aff=12861)。
 
 ### 自定义安装
 
-可以根据需要提前修改 `mixin.yaml` 中的配置，**其中留空的变量名不要随意删除**，也可以在安装完成后修改。Web 控制台目录固定为 `metacubexd`。
+可以根据需要提前修改 `mixin.yaml` 中的配置，**其中留空的变量名不要随意删除**，也可以在安装完成后修改。安装程序会根据选择明确设置 `external-ui`。
 
 ### 命令一览
 
@@ -73,14 +82,15 @@ Usage:
 Commands:
     on                   开启代理
     off                  关闭代理
-    ui                   面板地址
+    ui       [upgrade|change] 面板地址/更新/切换面板
+    ghproxy  [-e]        查看/编辑 GitHub 加速地址
     status               内核状况
     proxy    [on|off]    系统代理
     tun      [on|off]    Tun 模式
     mixin    [-e|-r]     Mixin 配置
     secret   [SECRET]    Web 密钥
     update   [auto|log]  更新订阅
-    upgrade  [release|alpha]  更新 Mihomo 内核
+    upgrade              更新 Mihomo 稳定版内核
 ```
 
 💡`clashon` 等同于 `clashctl on`，`Tab` 补全更方便！
@@ -125,10 +135,35 @@ $ clashsecret 666
 
 $ clashsecret
 😼 当前密钥：666
+
+$ clashui upgrade
+✅ metacubexd 已准备为稳定版 v1.270.6
+
+$ clashui change
+当前 Web 控制面板：metacubexd
+当前支持的面板：
+  1. metacubexd
+  2. zashboard
 ```
 
 - 通过浏览器打开 Web 控制台，实现可视化操作：切换节点、查看日志等。
+- `clashui upgrade` 会识别当前选择的面板并检测版本，仅在存在更新时下载对应面板的最新稳定版。
+- `clashui change` 会显示当前面板并要求确认。选择相同面板时执行升级，选择不同面板时下载并切换，同时更新 `external-ui` 并重启 Mihomo。
+- 面板切换或更新后请强制刷新浏览器缓存。
 - 若暴露到公网使用建议定期更换密钥。
+
+### GitHub 加速配置
+
+```bash
+$ ghproxy
+😼 GitHub 下载：官方链接
+
+$ ghproxy -e
+```
+
+- 配置文件每行填写一个 GitHub 加速地址；也支持使用分号或空格分隔；空文件表示只使用 GitHub 官方链接。
+- 配置多个地址后，下载和更新会依次尝试这些地址，不再回退到官方链接。
+- `ghproxy -e` 保存后立即生效，适用于 `clashupgrade` 和 `clashui upgrade` 等后续下载。
 
 ### 更新订阅
 
@@ -186,7 +221,7 @@ $ clashmixin -r
 sudo bash uninstall.sh
 ```
 
-卸载脚本会清除 Mihomo 服务、`/opt/clash`、安装时生成的 `resources/bin`、订阅定时任务、Shell/Fish 配置、桌面代理以及 Fish 代理环境临时文件（也会兼容清理旧版 `/var/proxy`）。仓库内自带的离线资源和用户预先放入 `resources/config.yaml` 的配置不会删除。
+卸载脚本会清除 Mihomo 服务、`/opt/clash`（包括 GitHub 加速配置）、安装时生成的 `resources/bin`、订阅定时任务、Shell/Fish 配置、桌面代理以及 Fish 代理环境临时文件（也会兼容清理旧版 `/var/proxy`）。仓库内自带的离线资源和用户预先放入 `resources/config.yaml` 的配置不会删除。
 
 ## 常见问题
 

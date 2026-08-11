@@ -6,6 +6,7 @@ clashtun \
 clashmixin \
 clashupdate \
 clashupgrade \
+ghproxy \
 clashhelp
 
 set -gx fish_version $FISH_VERSION

@@ -7,6 +7,8 @@ _valid_env
 
 [ -d "$CLASH_BASE_DIR" ] && _error_quit "请先执行卸载脚本,以清除安装路径：$CLASH_BASE_DIR"
 
+_configure_github_proxies || _error_quit 'GitHub 下载方式配置失败'
+_configure_ui || _error_quit 'Web 控制面板配置失败'
 trap _cleanup_install_tmp EXIT
 _prepare_install_resources || _error_quit '安装资源准备失败'
 _get_kernel
@@ -44,6 +46,7 @@ _valid_config "$RESOURCES_CONFIG" || {
 _okcat '✅' '配置可用'
 mkdir "$CLASH_BASE_DIR" || _error_quit "无法创建安装目录：$CLASH_BASE_DIR"
 printf '%s\n' "$url" >"$CLASH_CONFIG_URL" || _error_quit '无法保存订阅地址'
+_save_github_proxies || _error_quit '无法保存 GitHub 加速地址配置'
 
 /bin/cp -rf "$SCRIPT_BASE_DIR" "$CLASH_BASE_DIR" || _error_quit '脚本文件安装失败'
 /bin/cp -rf "$RESOURCES_BIN_DIR" "${CLASH_BASE_DIR}/bin" || _error_quit '程序文件安装失败'
@@ -53,17 +56,23 @@ printf '%s\n' "$url" >"$CLASH_CONFIG_URL" || _error_quit '无法保存订阅地�
     _error_quit 'Country.mmdb 安装失败'
 ui_extract_dir="${INSTALL_TMP_DIR}/ui"
 mkdir -p "$ui_extract_dir"
-unzip -oq "$ZIP_UI" -d "$ui_extract_dir"
+case "$UI_ARCHIVE_TYPE" in
+tar.gz) tar -xzf "$ZIP_UI" -C "$ui_extract_dir" ;;
+zip) unzip -oq "$ZIP_UI" -d "$ui_extract_dir" ;;
+*) _error_quit "$UI_NAME 压缩包类型无效" ;;
+esac
 ui_index=$(find "$ui_extract_dir" -type f -name index.html | head -n 1)
-[ -n "$ui_index" ] || _error_quit 'metacubexd 压缩包中未找到 index.html'
-/bin/cp -rf "$(dirname "$ui_index")" "${CLASH_BASE_DIR}/metacubexd" ||
-    _error_quit 'metacubexd 安装失败'
+[ -n "$ui_index" ] || _error_quit "$UI_NAME 压缩包中未找到 index.html"
+/bin/cp -rf "$(dirname "$ui_index")" "${CLASH_BASE_DIR}/${UI_NAME}" ||
+    _error_quit "$UI_NAME 安装失败"
+[ -z "$UI_VERSION" ] ||
+    printf '%s\n' "$UI_VERSION" >"${CLASH_BASE_DIR}/${UI_NAME}/.version"
 
 _set_rc || _error_quit 'Shell 配置安装失败'
 _set_bin
 secret=$(_get_random_val)
-sudo "$BIN_YQ" -i ".secret = \"$secret\"" "$CLASH_CONFIG_MIXIN" || {
-    _failcat "初始密钥写入失败"
+sudo "$BIN_YQ" -i ".secret = \"$secret\" | .\"external-ui\" = \"$UI_NAME\"" "$CLASH_CONFIG_MIXIN" || {
+    _failcat "初始密钥或面板配置写入失败"
     exit 1
 }
 _merge_config || exit 1
