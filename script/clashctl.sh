@@ -355,11 +355,7 @@ function ghproxy() {
             _failcat '无法创建 GitHub 加速配置文件'
             return 1
         }
-        if command -v sudoedit >/dev/null 2>&1; then
-            sudoedit "$CLASH_GITHUB_PROXY" || return 1
-        else
-            sudo "${EDITOR:-vi}" "$CLASH_GITHUB_PROXY" || return 1
-        fi
+        sudo vim "$CLASH_GITHUB_PROXY" || return 1
         tmp_file=$(mktemp) || return 1
         _normalize_github_proxies <"$CLASH_GITHUB_PROXY" >"$tmp_file"
         sudo /usr/bin/install -m 0644 "$tmp_file" "$CLASH_GITHUB_PROXY" || {

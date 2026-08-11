@@ -193,7 +193,7 @@ $ ghproxy -e
 
 - 配置文件每行填写一个 GitHub 加速地址；也支持使用分号或空格分隔；空文件表示只使用 GitHub 官方链接。
 - 配置多个地址后，下载和更新会依次尝试这些地址，不再回退到官方链接。
-- `ghproxy -e` 保存后立即生效，适用于 `clashupgrade` 和 `clashui upgrade` 等后续下载。
+- `ghproxy -e` 固定使用 `vim` 编辑 `/opt/clash/github-proxy`，保存后立即生效，适用于 `clashupgrade` 和 `clashui upgrade` 等后续下载。
 - 编辑时每行写一个地址；清空文件并保存即可改为只使用 GitHub 官方链接。
 
 ### 更新订阅
