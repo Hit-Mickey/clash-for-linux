@@ -454,49 +454,34 @@ EOF
 
     _okcat "下载内核：$asset_name"
     downloaded=false
-    for download_url in \
-        "$asset_url" \
-        "https://hubproxy-speedtest.mingqian.online/${asset_url}" \
-        "https://gh-proxy.org/${asset_url}" \
-        "https://gh-proxy.com/${asset_url}" \
-        "https://ghfast.top/${asset_url}" \
-        "https://ghproxy.net/${asset_url}"; do
-        rm -f "${archive_file}.part"
-        _okcat "尝试下载：$download_url"
-        if ! curl \
-            --progress-bar \
-            --show-error \
-            --fail \
-            --location \
-            --connect-timeout 10 \
-            --speed-limit 10240 \
-            --speed-time 30 \
-            --output "${archive_file}.part" \
-            "$download_url"; then
-            rm -f "${archive_file}.part"
-            _failcat '下载失败，切换下一个地址'
-            continue
-        fi
+    download_url="https://hubproxy-speedtest.mingqian.online/${asset_url}"
+    rm -f "${archive_file}.part"
+    _okcat "尝试下载：$download_url"
+    if curl \
+        --progress-bar \
+        --show-error \
+        --fail \
+        --location \
+        --output "${archive_file}.part" \
+        "$download_url"; then
         if ! gzip -t "${archive_file}.part" 2>/dev/null; then
-            rm -f "${archive_file}.part"
-            _failcat '压缩包校验失败，切换下一个地址'
-            continue
-        fi
-        if [ -n "$expected_sha256" ] &&
+            _failcat '压缩包校验失败'
+        elif [ -n "$expected_sha256" ] &&
             ! printf '%s  %s\n' "$expected_sha256" "${archive_file}.part" | sha256sum -c - >/dev/null 2>&1; then
-            rm -f "${archive_file}.part"
-            _failcat 'SHA-256 校验失败，切换下一个地址'
-            continue
+            _failcat 'SHA-256 校验失败'
+        else
+            mv -f "${archive_file}.part" "$archive_file"
+            _okcat '✅' "下载成功：$download_url"
+            downloaded=true
         fi
-        mv -f "${archive_file}.part" "$archive_file"
-        _okcat '✅' "下载成功：$download_url"
-        downloaded=true
-        break
-    done
+    else
+        _failcat '下载失败'
+    fi
+    rm -f "${archive_file}.part"
 
     [ "$downloaded" = true ] || {
         rm -rf "$tmp_dir"
-        _failcat "所有 GitHub 下载地址均失败"
+        _failcat "hubproxy 下载失败"
         return 1
     }
 

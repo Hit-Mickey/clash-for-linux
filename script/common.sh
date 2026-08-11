@@ -164,42 +164,28 @@ _download_install_asset() {
     local url=$2
     local type=$3
     local expected_sha256=$4
-    local download_url
+    local download_url="https://hubproxy-speedtest.mingqian.online/${url}"
 
-    for download_url in \
-        "$url" \
-        "https://hubproxy-speedtest.mingqian.online/${url}" \
-        "https://gh-proxy.org/${url}" \
-        "https://gh-proxy.com/${url}" \
-        "https://ghfast.top/${url}" \
-        "https://ghproxy.net/${url}"; do
-        rm -f "${dest}.part"
-        _okcat '🌐' "尝试下载：$download_url"
-        if ! curl \
-            --progress-bar \
-            --show-error \
-            --fail \
-            --location \
-            --connect-timeout 10 \
-            --speed-limit 10240 \
-            --speed-time 30 \
-            --output "${dest}.part" \
-            "$download_url"; then
-            rm -f "${dest}.part"
-            _failcat '下载失败，切换下一个地址'
-            continue
-        fi
-        if ! _validate_install_asset "${dest}.part" "$type" "$expected_sha256"; then
-            rm -f "${dest}.part"
-            _failcat '文件校验失败，切换下一个地址'
-            continue
-        fi
-        mv -f "${dest}.part" "$dest"
-        _okcat '✅' "下载成功：$download_url"
-        return 0
-    done
     rm -f "${dest}.part"
-    return 1
+    _okcat '🌐' "尝试下载：$download_url"
+    if ! curl \
+        --progress-bar \
+        --show-error \
+        --fail \
+        --location \
+        --output "${dest}.part" \
+        "$download_url"; then
+        rm -f "${dest}.part"
+        _failcat '下载失败'
+        return 1
+    fi
+    if ! _validate_install_asset "${dest}.part" "$type" "$expected_sha256"; then
+        rm -f "${dest}.part"
+        _failcat '文件校验失败'
+        return 1
+    fi
+    mv -f "${dest}.part" "$dest"
+    _okcat '✅' "下载成功：$download_url"
 }
 
 _fallback_install_asset() {
@@ -457,8 +443,6 @@ _download_raw_config() {
         --show-error \
         --insecure \
         --location \
-        --max-time 30 \
-        --retry 1 \
         --user-agent "$agent" \
         --output "$dest" \
         "$url" ||

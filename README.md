@@ -45,9 +45,9 @@ git clone --branch master --depth 1 https://github.com/Hit-Mickey/clash-for-linu
 
 ### 安装资源
 
-每次安装都会优先下载最新版 `mihomo`、`yq`、`metacubexd` 和 `Country.mmdb`（即 country.mmdb）。脚本会先尝试 GitHub 官方地址；连接超时、下载报错或文件校验失败后，依次切换到 `hubproxy-speedtest.mingqian.online`、`gh-proxy.org` 等加速地址；全部失败时才使用 `resources` 中随仓库提供的离线资源。安装后仍可通过 `clashupgrade` 升级 Mihomo 稳定版，或通过 `clashupgrade alpha` 升级测试版。
+每次安装都会通过 `hubproxy-speedtest.mingqian.online` 下载最新版 `mihomo`、`yq`、`metacubexd` 和 `Country.mmdb`（即 country.mmdb）。下载失败或文件校验失败时，才使用 `resources` 中随仓库提供的离线资源。安装后仍可通过 `clashupgrade` 升级 Mihomo 稳定版，或通过 `clashupgrade alpha` 升级测试版。
 
-API 和资源文件下载采用相同规则：不限制总时长，连接最多等待 10 秒，连续 30 秒低于 10 KiB/s 时才切换下载地址。
+API 和资源文件下载均不设置 curl 连接超时、总时长或低速限制。
 
 安装完后请通过`clashui`和`clashsecret`查看端口和初始密码
 
