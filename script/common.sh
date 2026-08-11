@@ -401,6 +401,7 @@ _prepare_install_resources() {
         ZIP_MIHOMO=$(_fallback_install_asset 'Mihomo' "$fallback" gzip) || return 1
     fi
 
+    _install_divider
     _okcat '⏳' '正在下载最新 yq...'
     if _download_install_asset "${INSTALL_TMP_DIR}/yq.tar.gz" \
         "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${yq_arch}.tar.gz" tar.gz ''; then
@@ -411,6 +412,7 @@ _prepare_install_resources() {
         ZIP_YQ=$(_fallback_install_asset 'yq' "$fallback" tar.gz) || return 1
     fi
 
+    _install_divider
     _okcat '⏳' '正在下载最新 subconverter...'
     if [ -n "$subconverter_arch" ] && _download_install_asset \
         "${INSTALL_TMP_DIR}/subconverter.tar.gz" \
@@ -429,6 +431,7 @@ _prepare_install_resources() {
         ZIP_SUBCONVERTER=$(_fallback_install_asset 'subconverter' "$fallback" tar.gz) || return 1
     fi
 
+    _install_divider
     _okcat '⏳' "正在获取最新 $UI_NAME 稳定版..."
     ui_release_json="${INSTALL_TMP_DIR}/${UI_NAME}-release.json"
     if _download_install_asset "$ui_release_json" "$UI_RELEASE_API" json ''; then
@@ -471,6 +474,7 @@ _prepare_install_resources() {
         UI_VERSION=''
     fi
 
+    _install_divider
     _okcat '⏳' '正在下载最新 Country.mmdb...'
     if _download_install_asset "${INSTALL_TMP_DIR}/Country.mmdb" "$URL_COUNTRY_MMDB" mmdb ''; then
         COUNTRY_MMDB="${INSTALL_TMP_DIR}/Country.mmdb"
@@ -559,6 +563,10 @@ function _quit() {
 _install_section() {
     printf '\n%s\n' '------------------------------------------------------------'
     printf ' %s\n' "$1"
+    printf '%s\n' '------------------------------------------------------------'
+}
+
+_install_divider() {
     printf '%s\n' '------------------------------------------------------------'
 }
 
