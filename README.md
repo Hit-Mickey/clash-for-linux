@@ -8,7 +8,7 @@
 - 安装最新稳定版 `mihomo` 内核。
 - Web 控制台支持 [metacubexd](https://github.com/MetaCubeX/metacubexd) 和 [zashboard](https://github.com/Zephyruso/zashboard)。
 - 支持使用 [subconverter](https://github.com/tindy2013/subconverter) 进行本地订阅转换。
-- 多架构支持，适配主流 `Linux` 发行版：`CentOS 7.6`、`Debian 12`、`Ubuntu 22.04.1 LTS`、`Ubuntu 24.04.1 LTS`。
+- 多架构支持，适配主流 `Linux` 发行版。
 
 ## 说明
 
@@ -54,9 +54,7 @@ git clone --branch master --depth 1 https://github.com/Hit-Mickey/clash-for-linu
 
 安装时还会提示选择 Web 控制面板：输入 `1` 或直接回车选择 metacubexd，输入 `2` 选择 zashboard。安装完成后，`mixin.yaml` 和 `runtime.yaml` 中的 `external-ui` 会明确写入当前面板名称。
 
-每次安装都会下载最新版 `mihomo`、`yq`、`subconverter`、所选面板和 `Country.mmdb`（即 country.mmdb）。subconverter 使用 [tindy2013/subconverter 官方最新 Release](https://github.com/tindy2013/subconverter/releases/latest)。所有配置的下载地址均失败或文件校验失败时，才使用 `resources` 中随仓库提供的对应官方稳定版离线资源。安装后的 Mihomo 与面板均只提供稳定版升级：通过 `clashupgrade` 更新 Mihomo，通过 `clashui upgrade` 更新当前面板。
-
-API 和资源文件下载均不设置 curl 连接超时、总时长或低速限制。
+每次安装都会下载最新版 `mihomo`、`yq`、`subconverter`、所选面板和 `Country.mmdb`（即 country.mmdb）。所有配置的下载地址均失败或文件校验失败时，才使用 `resources` 中随仓库提供的对应官方稳定版离线资源。安装后的 Mihomo 与面板均只提供稳定版升级：通过 `clashupgrade` 更新 Mihomo，通过 `clashui upgrade` 更新当前面板。
 
 安装完后请通过`clashui`和`clashsecret`查看端口和初始密码
 
@@ -213,7 +211,7 @@ $ clashupdate log
 
 - `clashupdate` 会记住上次更新成功的订阅链接，后续执行无需再指定。
 - `clashupdate URL` 立即使用新链接更新；`clashupdate` 不带参数时沿用上次成功的链接。
-- `clashupdate auto [URL]` 创建每两天执行一次的定时任务；不提供 URL 时使用当前保存的链接。
+- `clashupdate auto [URL]` 创建每天0点执行一次的定时任务；不提供 URL 时使用当前保存的链接。
 - `clashupdate log` 查看最近的订阅更新记录。
 - 可通过 `crontab -e` 修改定时更新频率及订阅链接。
 - 通过配置文件进行更新：[pr#24](https://github.com/nelvko/clash-for-linux-install/pull/24#issuecomment-2565054701)
