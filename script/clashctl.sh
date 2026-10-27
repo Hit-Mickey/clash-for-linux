@@ -6,10 +6,20 @@ _has_gsettings_proxy_schema() {
         gsettings list-schemas 2>/dev/null | grep -qx 'org.gnome.system.proxy'
 }
 
-_set_system_proxy() {
+_read_proxy_value() {
+    if [ -r "$2" ]; then
+        "$BIN_YQ" -r "$1" "$2"
+    elif [ "${3:-interactive}" = quiet ]; then
+        sudo -n "$BIN_YQ" -r "$1" "$2"
+    else
+        sudo "$BIN_YQ" -r "$1" "$2"
+    fi
+}
+
+_load_proxy_addresses() {
     local mixed_port auth bind_addr
-    # 每次从运行配置读取，避免依赖当前 Shell 中是否执行过 clashon。
-    mixed_port=$(sudo "$BIN_YQ" -r '.mixed-port // ""' "$CLASH_CONFIG_RUNTIME") || {
+    local read_mode=${1:-interactive}
+    mixed_port=$(_read_proxy_value '.mixed-port // ""' "$CLASH_CONFIG_RUNTIME" "$read_mode") || {
         _failcat '无法读取运行配置中的代理端口'
         return 1
     }
@@ -18,29 +28,68 @@ _set_system_proxy() {
         return 1
     }
 
-    auth=$(sudo "$BIN_YQ" '.authentication[0] // ""' "$CLASH_CONFIG_RUNTIME") || {
+    auth=$(_read_proxy_value '.authentication[0] // ""' "$CLASH_CONFIG_RUNTIME" "$read_mode") || {
         _failcat '无法读取运行配置中的代理认证信息'
         return 1
     }
     [ -n "$auth" ] && auth=$auth@
 
-    bind_addr=$(sudo "$BIN_YQ" '.bind-address // ""' "$CLASH_CONFIG_RUNTIME") || {
+    bind_addr=$(_read_proxy_value '.bind-address // ""' "$CLASH_CONFIG_RUNTIME" "$read_mode") || {
         _failcat '无法读取运行配置中的代理地址'
         return 1
     }
     case $bind_addr in "" | "*" | "0.0.0.0") bind_addr=127.0.0.1 ;; esac
-    local http_proxy_addr="http://${auth}${bind_addr}:${mixed_port}"
-    local socks_proxy_addr="socks5h://${auth}${bind_addr}:${mixed_port}"
-    
-    # 为当前终端环境设置变量
-    export http_proxy=$http_proxy_addr
+    _CLASH_PROXY_HOST=$bind_addr
+    _CLASH_PROXY_PORT=$mixed_port
+    _CLASH_PROXY_HTTP_ADDR="http://${auth}${bind_addr}:${mixed_port}"
+    _CLASH_PROXY_SOCKS_ADDR="socks5h://${auth}${bind_addr}:${mixed_port}"
+}
+
+_set_terminal_proxy() {
+    export http_proxy=$_CLASH_PROXY_HTTP_ADDR
     export https_proxy=$http_proxy
     export HTTP_PROXY=$http_proxy
     export HTTPS_PROXY=$http_proxy
-    export all_proxy=$socks_proxy_addr
+    export all_proxy=$_CLASH_PROXY_SOCKS_ADDR
     export ALL_PROXY=$all_proxy
     export no_proxy="localhost,127.0.0.1,::1,192.168.0.0/16,172.16.0.0/12,10.0.0.0/8"
     export NO_PROXY=$no_proxy
+}
+
+_unset_terminal_proxy() {
+    unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
+}
+
+_sync_proxy_env() {
+    local read_mode=${1:-quiet} enabled
+    enabled=$(_read_proxy_value '.system-proxy.enable' "$CLASH_CONFIG_MIXIN" "$read_mode") || {
+        _failcat '无法读取系统代理状态'
+        return 1
+    }
+    case "$enabled" in
+    false)
+        _unset_terminal_proxy
+        _CLASH_PROXY_STATE=off
+        return 0
+        ;;
+    true) ;;
+    *)
+        _failcat 'system-proxy.enable 无效，应为 true 或 false'
+        return 1
+        ;;
+    esac
+    if ! systemctl is-active "$BIN_KERNEL_NAME" >/dev/null 2>&1; then
+        _unset_terminal_proxy
+        _CLASH_PROXY_STATE=stopped
+        return 0
+    fi
+    _load_proxy_addresses "$read_mode" || return 1
+    _set_terminal_proxy
+    _CLASH_PROXY_STATE=on
+}
+
+_set_system_proxy() {
+    _load_proxy_addresses || return 1
 
     # 设置 GNOME 桌面系统代理（如果有）
     if _has_gsettings_proxy_schema; then
@@ -50,14 +99,14 @@ _set_system_proxy() {
         if ! {
             gsettings set org.gnome.system.proxy ignore-hosts "['localhost', '127.*', '192.168.*', '10.*', '172.16.*', '172.17.*', '172.18.*', '172.19.*', '172.20.*', '172.21.*', '172.22.*', '172.23.*', '172.24.*', '172.25.*', '172.26.*', '172.27.*', '172.28.*', '172.29.*', '172.30.*', '172.31.*', '<local>']" &&
 
-                gsettings set org.gnome.system.proxy.http host "$bind_addr" &&
-                gsettings set org.gnome.system.proxy.http port "$mixed_port" &&
+                gsettings set org.gnome.system.proxy.http host "$_CLASH_PROXY_HOST" &&
+                gsettings set org.gnome.system.proxy.http port "$_CLASH_PROXY_PORT" &&
 
-                gsettings set org.gnome.system.proxy.https host "$bind_addr" &&
-                gsettings set org.gnome.system.proxy.https port "$mixed_port" &&
+                gsettings set org.gnome.system.proxy.https host "$_CLASH_PROXY_HOST" &&
+                gsettings set org.gnome.system.proxy.https port "$_CLASH_PROXY_PORT" &&
 
-                gsettings set org.gnome.system.proxy.socks host "$bind_addr" &&
-                gsettings set org.gnome.system.proxy.socks port "$mixed_port" &&
+                gsettings set org.gnome.system.proxy.socks host "$_CLASH_PROXY_HOST" &&
+                gsettings set org.gnome.system.proxy.socks port "$_CLASH_PROXY_PORT" &&
 
                 gsettings set org.gnome.system.proxy mode 'manual'
         }; then
@@ -65,22 +114,22 @@ _set_system_proxy() {
             return 1
         fi
     fi
+    _set_terminal_proxy
+    _CLASH_PROXY_STATE=on
     return 0
 }
 
 _unset_system_proxy() {
-    unset http_proxy
-    unset https_proxy
-    unset HTTP_PROXY
-    unset HTTPS_PROXY
-    unset all_proxy
-    unset ALL_PROXY
-    unset no_proxy
-    unset NO_PROXY
+    _unset_terminal_proxy
+    _CLASH_PROXY_STATE=off
     if _has_gsettings_proxy_schema; then
         [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
-        gsettings set org.gnome.system.proxy mode 'none'
+        gsettings set org.gnome.system.proxy mode 'none' || {
+            _failcat '关闭桌面系统代理失败'
+            return 1
+        }
     fi
+    return 0
 }
 
 function clashon() {
@@ -91,24 +140,57 @@ function clashon() {
             return 1
         }
     }
-    if clashproxy status >/dev/null; then
+    _sync_proxy_env interactive || return 1
+    if [ "$_CLASH_PROXY_STATE" = on ]; then
         _set_system_proxy || return 1
     fi
     _okcat '已开启代理环境'
 }
 
 watch_proxy() {
-    # 新开交互式shell，且无代理变量时
-    [ -z "$http_proxy" ] && [[ $- == *i* ]] && {
-        # root用户自动开启代理环境（普通用户会触发sudo验证密码导致卡住）
-        _is_root && clashon
-    }
+    local previous_status=$?
+    # 提示符钩子仅同步环境变量，既不启动服务，也不写桌面设置。
+    _sync_proxy_env quiet >/dev/null 2>&1
+    return "$previous_status"
+}
+
+_install_proxy_hooks() {
+    [[ $- == *i* ]] || return 0
+    local entry
+    if [ -n "$BASH_VERSION" ]; then
+        if declare -p PROMPT_COMMAND 2>/dev/null | grep -q '^declare -a'; then
+            for entry in "${PROMPT_COMMAND[@]}"; do
+                [ "$entry" = watch_proxy ] && return 0
+            done
+            PROMPT_COMMAND+=(watch_proxy)
+        else
+            case ";${PROMPT_COMMAND};" in
+            *';watch_proxy;'* | *'; watch_proxy;'* | *$'\nwatch_proxy;'* | *$'\nwatch_proxy\n'*) ;;
+            *)
+                if [ -n "$PROMPT_COMMAND" ]; then
+                    PROMPT_COMMAND="${PROMPT_COMMAND}"$'\nwatch_proxy'
+                else
+                    PROMPT_COMMAND=watch_proxy
+                fi
+                ;;
+            esac
+        fi
+    elif [ -n "$ZSH_VERSION" ]; then
+        typeset -ga precmd_functions
+        case " ${precmd_functions[*]} " in
+        *' watch_proxy '*) ;;
+        *) precmd_functions+=(watch_proxy) ;;
+        esac
+    fi
 }
 
 function clashoff() {
-    sudo systemctl stop "$BIN_KERNEL_NAME" && _okcat '已关闭代理环境' ||
-        _failcat '关闭失败: 执行 "clashstatus" 查看日志' || return 1
-    _unset_system_proxy
+    sudo systemctl stop "$BIN_KERNEL_NAME" || {
+        _failcat '关闭失败: 执行 "clashstatus" 查看日志'
+        return 1
+    }
+    _unset_system_proxy || return 1
+    _okcat '已关闭代理环境'
 }
 
 clashrestart() {
@@ -133,13 +215,20 @@ function clashproxy() {
         _okcat '已开启系统代理'
         ;;
     off)
-        sudo "$BIN_YQ" -i '.system-proxy.enable = false' "$CLASH_CONFIG_MIXIN"
-        _unset_system_proxy
+        sudo "$BIN_YQ" -i '.system-proxy.enable = false' "$CLASH_CONFIG_MIXIN" || {
+            _failcat '无法保存系统代理配置'
+            return 1
+        }
+        _unset_system_proxy || return 1
         _okcat '已关闭系统代理'
         ;;
     status)
-        local system_proxy_status=$(sudo "$BIN_YQ" '.system-proxy.enable' "$CLASH_CONFIG_MIXIN" 2>/dev/null)
-        [ "$system_proxy_status" = "false" ] && {
+        _sync_proxy_env interactive || return 1
+        if [ "$_CLASH_PROXY_STATE" = stopped ]; then
+            _failcat '系统代理：关闭（Mihomo 未运行）'
+            return 1
+        fi
+        [ "$_CLASH_PROXY_STATE" = off ] && {
             _failcat "系统代理：关闭"
             return 1
         }
@@ -935,3 +1024,8 @@ Commands:
 
 EOF
 }
+
+_install_proxy_hooks
+if [[ $- == *i* ]]; then
+    watch_proxy
+fi
