@@ -75,3 +75,8 @@ function clashoff
     no_proxy \
     NO_PROXY
 end
+
+function clashrenew
+    bash -i -c 'clashrenew "$@"' -- $argv; or return 1
+    source "$HOME/.config/fish/conf.d/clashctl.fish"
+end

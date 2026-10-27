@@ -90,6 +90,7 @@ Commands:
     secret   [SECRET]    Web 密钥
     update   [URL|auto|log] 更新订阅
     upgrade              更新 Mihomo 稳定版内核
+    renew                更新本项目管理脚本
 ```
 
 每个子命令也有对应的独立快捷命令：
@@ -107,6 +108,7 @@ Commands:
 | `clashctl mixin [-e\|-r]` | `clashmixin [-e\|-r]` | 查看/编辑 Mixin 或查看运行配置 |
 | `clashctl tun [on\|off]` | `clashtun [on\|off]` | 查看或切换 TUN 模式 |
 | `clashctl upgrade` | `clashupgrade` | 升级 Mihomo 最新稳定版 |
+| `clashctl renew` | `clashrenew` | 更新本项目管理脚本，保留现有配置 |
 | `clashctl ghproxy [-e]` | `ghproxy [-e]` | 查看或编辑 GitHub 加速地址 |
 
 快捷命令适合日常使用，`clashctl` 形式便于统一记忆，两者效果相同。
@@ -268,6 +270,28 @@ clashupgrade
 - 会比较当前版本；已经是最新版时不会重复下载。
 - 新内核会先验证可执行性并备份旧内核；重启失败时自动恢复。
 - GitHub API 和内核下载遵循 `ghproxy` 中保存的地址顺序。
+
+### 更新管理脚本
+
+安装后执行以下命令即可更新本项目的管理脚本，无需卸载重装：
+
+```bash
+clashrenew
+```
+
+- 等价命令为 `clashctl renew`，更新来源为本仓库 `master` 分支，下载遵循 `ghproxy` 中保存的地址顺序。
+- 更新 `common.sh`、`clashctl.sh` 和 `clashctl.fish`，并同步当前用户已有的 Fish 启动配置。
+- 下载完成后先检查文件完整性及 Shell 语法，再备份并替换；替换失败时恢复原文件。
+- 保留订阅、Mixin、运行配置、密钥、GitHub 加速配置、定时任务、内核和控制面板，不重启 Mihomo。
+- Bash/Zsh 当前终端会自动重新加载；Fish 会在更新成功后重新加载启动配置。其他已打开的终端需重新打开。
+
+旧版本没有 `clashrenew` 命令时，先将本地仓库更新到包含该命令的版本，然后在仓库根目录的 Bash/Zsh 终端中执行一次：
+
+```bash
+source script/common.sh && source script/clashctl.sh && clashrenew
+```
+
+这条命令仅加载新版更新入口并更新已安装脚本，无需重新运行 `install.sh`。旧版 Fish 用户可先进入 Bash 完成这一步，再重新打开 Fish 终端。
 
 ### 卸载
 

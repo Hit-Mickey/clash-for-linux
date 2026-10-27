@@ -7,13 +7,30 @@ _has_gsettings_proxy_schema() {
 }
 
 _set_system_proxy() {
-    local auth=$(sudo "$BIN_YQ" '.authentication[0] // ""' "$CLASH_CONFIG_RUNTIME")
+    local mixed_port auth bind_addr
+    # 每次从运行配置读取，避免依赖当前 Shell 中是否执行过 clashon。
+    mixed_port=$(sudo "$BIN_YQ" -r '.mixed-port // ""' "$CLASH_CONFIG_RUNTIME") || {
+        _failcat '无法读取运行配置中的代理端口'
+        return 1
+    }
+    [[ "$mixed_port" =~ ^[1-9][0-9]{0,4}$ ]] && [ "$mixed_port" -le 65535 ] || {
+        _failcat "运行配置中的 mixed-port 无效：${mixed_port:-未配置}（应为 1–65535）"
+        return 1
+    }
+
+    auth=$(sudo "$BIN_YQ" '.authentication[0] // ""' "$CLASH_CONFIG_RUNTIME") || {
+        _failcat '无法读取运行配置中的代理认证信息'
+        return 1
+    }
     [ -n "$auth" ] && auth=$auth@
 
-    local bind_addr=$(sudo "$BIN_YQ" '.bind-address // ""' "$CLASH_CONFIG_RUNTIME")
+    bind_addr=$(sudo "$BIN_YQ" '.bind-address // ""' "$CLASH_CONFIG_RUNTIME") || {
+        _failcat '无法读取运行配置中的代理地址'
+        return 1
+    }
     case $bind_addr in "" | "*" | "0.0.0.0") bind_addr=127.0.0.1 ;; esac
-    local http_proxy_addr="http://${auth}${bind_addr}:${MIXED_PORT}"
-    local socks_proxy_addr="socks5h://${auth}${bind_addr}:${MIXED_PORT}"
+    local http_proxy_addr="http://${auth}${bind_addr}:${mixed_port}"
+    local socks_proxy_addr="socks5h://${auth}${bind_addr}:${mixed_port}"
     
     # 为当前终端环境设置变量
     export http_proxy=$http_proxy_addr
@@ -30,19 +47,25 @@ _set_system_proxy() {
         [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
         echo "🖥️ 检测到桌面环境，正在设置系统 GUI 代理..."
         
-        gsettings set org.gnome.system.proxy ignore-hosts "['localhost', '127.*', '192.168.*', '10.*', '172.16.*', '172.17.*', '172.18.*', '172.19.*', '172.20.*', '172.21.*', '172.22.*', '172.23.*', '172.24.*', '172.25.*', '172.26.*', '172.27.*', '172.28.*', '172.29.*', '172.30.*', '172.31.*', '<local>']"
+        if ! {
+            gsettings set org.gnome.system.proxy ignore-hosts "['localhost', '127.*', '192.168.*', '10.*', '172.16.*', '172.17.*', '172.18.*', '172.19.*', '172.20.*', '172.21.*', '172.22.*', '172.23.*', '172.24.*', '172.25.*', '172.26.*', '172.27.*', '172.28.*', '172.29.*', '172.30.*', '172.31.*', '<local>']" &&
 
-        gsettings set org.gnome.system.proxy.http host "$bind_addr"
-        gsettings set org.gnome.system.proxy.http port "$MIXED_PORT"
+                gsettings set org.gnome.system.proxy.http host "$bind_addr" &&
+                gsettings set org.gnome.system.proxy.http port "$mixed_port" &&
 
-        gsettings set org.gnome.system.proxy.https host "$bind_addr"
-        gsettings set org.gnome.system.proxy.https port "$MIXED_PORT"
+                gsettings set org.gnome.system.proxy.https host "$bind_addr" &&
+                gsettings set org.gnome.system.proxy.https port "$mixed_port" &&
 
-        gsettings set org.gnome.system.proxy.socks host "$bind_addr"
-        gsettings set org.gnome.system.proxy.socks port "$MIXED_PORT"
+                gsettings set org.gnome.system.proxy.socks host "$bind_addr" &&
+                gsettings set org.gnome.system.proxy.socks port "$mixed_port" &&
 
-        gsettings set org.gnome.system.proxy mode 'manual'
+                gsettings set org.gnome.system.proxy mode 'manual'
+        }; then
+            _failcat '设置桌面系统代理失败'
+            return 1
+        fi
     fi
+    return 0
 }
 
 _unset_system_proxy() {
@@ -68,7 +91,9 @@ function clashon() {
             return 1
         }
     }
-    clashproxy status >/dev/null && _set_system_proxy
+    if clashproxy status >/dev/null; then
+        _set_system_proxy || return 1
+    fi
     _okcat '已开启代理环境'
 }
 
@@ -100,8 +125,11 @@ function clashproxy() {
             _failcat '代理程序未运行，请执行 clashon 开启代理环境'
             return 1
         }
-        sudo "$BIN_YQ" -i '.system-proxy.enable = true' "$CLASH_CONFIG_MIXIN"
-        _set_system_proxy
+        sudo "$BIN_YQ" -i '.system-proxy.enable = true' "$CLASH_CONFIG_MIXIN" || {
+            _failcat '无法保存系统代理配置'
+            return 1
+        }
+        _set_system_proxy || return 1
         _okcat '已开启系统代理'
         ;;
     off)
@@ -546,6 +574,140 @@ function clashmixin() {
     esac
 }
 
+# 在子 Shell 中完成替换与清理，避免修改调用者的 trap。
+_renew_clash_scripts() (
+    local tmp_dir='' stage_dir='' lock_dir='' file fish_file=''
+    local update_started=false fish_changed=false committed=false
+
+    _cleanup_renew() {
+        local exit_code=$? keep_stage=false
+        if [ "$update_started" = true ] && [ "$committed" = false ]; then
+            if sudo test -d "${stage_dir}/previous"; then
+                if { ! sudo test -e "$CLASH_SCRIPT_DIR" ||
+                    sudo /bin/mv "$CLASH_SCRIPT_DIR" "${stage_dir}/failed"; } &&
+                    sudo /bin/mv "${stage_dir}/previous" "$CLASH_SCRIPT_DIR"; then
+                    :
+                else
+                    keep_stage=true
+                    _failcat "脚本恢复失败，备份保留在：${stage_dir}/previous"
+                fi
+            fi
+            if [ "$fish_changed" = true ]; then
+                sudo /bin/cp -p "${stage_dir}/fish.previous" "$fish_file" || {
+                    keep_stage=true
+                    _failcat "Fish 配置恢复失败，备份保留在：${stage_dir}/fish.previous"
+                }
+            fi
+        fi
+        [ -z "$stage_dir" ] || [ "$keep_stage" = true ] || sudo /bin/rm -rf -- "$stage_dir"
+        [ -z "$lock_dir" ] || sudo rmdir -- "$lock_dir"
+        [ -z "$tmp_dir" ] || rm -rf -- "$tmp_dir"
+        return "$exit_code"
+    }
+    trap _cleanup_renew EXIT
+
+    tmp_dir=$(mktemp -d /tmp/clash-renew.XXXXXX) || {
+        _failcat '无法创建脚本更新临时目录'
+        return 1
+    }
+    _okcat '正在下载最新管理脚本...'
+    _download_install_asset "${tmp_dir}/scripts.tar.gz" "$URL_CLASH_SCRIPTS_ARCHIVE" tar.gz '' || {
+        _failcat '管理脚本下载失败，现有脚本未修改'
+        return 1
+    }
+    # 仅取出管理脚本，三份文件均来自同一个归档。
+    for file in common.sh clashctl.sh clashctl.fish; do
+        tar -xOf "${tmp_dir}/scripts.tar.gz" "clash-for-linux-master/script/${file}" >"${tmp_dir}/${file}" &&
+            [ -s "${tmp_dir}/${file}" ] || {
+            _failcat "更新归档缺少有效脚本：$file"
+            return 1
+        }
+    done
+    for file in common.sh clashctl.sh; do
+        bash -n "${tmp_dir}/${file}" || {
+            _failcat "脚本语法检查失败：$file"
+            return 1
+        }
+        if command -v zsh >/dev/null 2>&1; then
+            zsh -n "${tmp_dir}/${file}" || {
+                _failcat "Zsh 语法检查失败：$file"
+                return 1
+            }
+        fi
+    done
+    grep -Eq '^(function[[:space:]]+)?clashrenew[[:space:]]*\(\)' "${tmp_dir}/clashctl.sh" || {
+        _failcat '下载的脚本缺少 clashrenew 更新入口，请确认仓库已发布新版'
+        return 1
+    }
+    if command -v fish >/dev/null 2>&1; then
+        fish -n "${tmp_dir}/clashctl.fish" || {
+            _failcat 'Fish 脚本语法检查失败'
+            return 1
+        }
+    fi
+
+    sudo mkdir "${CLASH_BASE_DIR}/.renew.lock" || {
+        _failcat '无法取得脚本更新锁，请检查权限或是否已有更新正在进行'
+        return 1
+    }
+    lock_dir="${CLASH_BASE_DIR}/.renew.lock"
+    stage_dir=$(sudo mktemp -d "${CLASH_BASE_DIR}/.renew.XXXXXX") &&
+        sudo mkdir -m 0755 "${stage_dir}/new" || {
+        _failcat '无法准备脚本更新目录'
+        return 1
+    }
+    for file in common.sh clashctl.sh clashctl.fish; do
+        sudo /usr/bin/install -m 0644 "${tmp_dir}/${file}" "${stage_dir}/new/${file}" || {
+            _failcat "无法准备新脚本：$file"
+            return 1
+        }
+    done
+    if [ -n "$SHELL_RC_FISH" ] && [ -f "$SHELL_RC_FISH" ]; then
+        fish_file=$SHELL_RC_FISH
+        sudo /bin/cp -p "$fish_file" "${stage_dir}/fish.previous" || {
+            _failcat '无法备份 Fish 配置，现有脚本未修改'
+            return 1
+        }
+    fi
+
+    update_started=true
+    sudo /bin/mv "$CLASH_SCRIPT_DIR" "${stage_dir}/previous" &&
+        sudo /bin/mv "${stage_dir}/new" "$CLASH_SCRIPT_DIR" || {
+        _failcat '替换管理脚本失败，正在恢复原脚本'
+        return 1
+    }
+    if [ -n "$fish_file" ]; then
+        fish_changed=true
+        sudo /bin/cp "${CLASH_SCRIPT_DIR}/clashctl.fish" "$fish_file" || {
+            _failcat '更新 Fish 配置失败，正在恢复原文件'
+            return 1
+        }
+    fi
+    committed=true
+)
+
+function clashrenew() {
+    case "$1" in
+    -h | --help)
+        printf '%s\n' '用法：clashrenew（或 clashctl renew）' \
+            '同步本项目 master 分支的管理脚本，保留配置、内核和控制面板。'
+        return 0
+        ;;
+    "") ;;
+    *)
+        _failcat '用法：clashrenew（或 clashctl renew）'
+        return 1
+        ;;
+    esac
+
+    _renew_clash_scripts || return 1
+    . "$CLASH_SCRIPT_DIR/common.sh" && . "$CLASH_SCRIPT_DIR/clashctl.sh" || {
+        _failcat '脚本已更新，但当前终端加载失败，请重新打开终端'
+        return 1
+    }
+    _okcat '管理脚本已更新并重新加载；其他已打开的终端请重新打开后使用'
+}
+
 function clashupgrade() {
     local arch asset_pattern fallback_pattern
     local tmp_dir release_json asset_url asset_name asset_digest expected_sha256
@@ -739,6 +901,10 @@ function clashctl() {
         shift
         clashupgrade "$@"
         ;;
+    renew)
+        shift
+        clashrenew "$@"
+        ;;
     *)
         shift
         clashhelp "$@"
@@ -765,6 +931,7 @@ Commands:
     secret   [SECRET]       Web 密钥
     update   [URL|auto|log] 更新订阅
     upgrade                 升级稳定版内核
+    renew                   更新本项目管理脚本
 
 EOF
 }

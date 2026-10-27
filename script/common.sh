@@ -13,6 +13,7 @@ URL_MIHOMO_RELEASE_API='https://api.github.com/repos/MetaCubeX/mihomo/releases/l
 URL_METACUBEXD_RELEASE_API='https://api.github.com/repos/MetaCubeX/metacubexd/releases/latest'
 URL_ZASHBOARD_RELEASE_API='https://api.github.com/repos/Zephyruso/zashboard/releases/latest'
 URL_COUNTRY_MMDB='https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb'
+URL_CLASH_SCRIPTS_ARCHIVE='https://github.com/Hit-Mickey/clash-for-linux/archive/refs/heads/master.tar.gz'
 
 SCRIPT_BASE_DIR='./script'
 SCRIPT_FISH="${SCRIPT_BASE_DIR}/clashctl.fish"
